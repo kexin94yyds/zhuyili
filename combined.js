@@ -88,6 +88,11 @@ function initApp() {
     // 初始化DOM元素引用
     initDOMElements();
     
+    // 初始化多计时器管理器
+    if (typeof MultiStopwatchManager !== 'undefined') {
+        window.multiStopwatchManager = new MultiStopwatchManager();
+    }
+    
     // 从本地存储加载数据
     loadData();
     
@@ -177,42 +182,15 @@ function startActivity() {
         return;
     }
     
-    // 查找最近的同名活动记录
-    const lastActivity = findLastActivityByName(activityName);
-    let continuedFrom = null;
-    let isPartOfSeries = false;
-    
-    if (lastActivity) {
-        continuedFrom = lastActivity.id;
-        isPartOfSeries = true;
+    // 确保多计时器管理器存在
+    if (typeof window.multiStopwatchManager !== 'undefined') {
+        // 创建计时器
+        window.multiStopwatchManager.getTimer(activityName);
+        window.multiStopwatchManager.saveData();
     }
     
-    // 如果有正在进行的活动，先结束它
-    if (currentActivity) {
-        endActivity();
-    }
-    
-    // 创建新活动
-    const now = new Date();
-    currentActivity = {
-        id: generateId(),
-        activityName: activityName,
-        startTime: now,
-        endTime: null,
-        duration: 0,
-        continuedFrom: continuedFrom,
-        isPartOfSeries: isPartOfSeries
-    };
-    
-    // 更新UI
-    updateCurrentActivityUI();
-    startDurationTimer();
-    
-    // 清空输入框
-    activityNameInput.value = '';
-    
-    // 保存数据
-    saveData();
+    // 跳转到计时页面
+    window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
 }
 
 // 查找最近的同名活动
