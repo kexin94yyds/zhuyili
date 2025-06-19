@@ -53,9 +53,33 @@ header {
 
 h1 {
     color: #f0f0f0;
-    font-size: 24px;
-    font-weight: 300;
-    letter-spacing: 2px;
+    font-family: 'Orbitron', 'Rajdhani', 'Exo 2', 'Titillium Web', 'Source Sans Pro', sans-serif;
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    text-shadow: 
+        0 0 10px rgba(240, 240, 240, 0.4),
+        0 0 20px rgba(240, 240, 240, 0.2),
+        0 0 30px rgba(240, 240, 240, 0.1);
+    position: relative;
+    opacity: 0.95;
+    animation: subtle-glow 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes subtle-glow {
+    0% {
+        text-shadow: 
+            0 0 10px rgba(240, 240, 240, 0.4),
+            0 0 20px rgba(240, 240, 240, 0.2),
+            0 0 30px rgba(240, 240, 240, 0.1);
+    }
+    100% {
+        text-shadow: 
+            0 0 15px rgba(240, 240, 240, 0.5),
+            0 0 25px rgba(240, 240, 240, 0.3),
+            0 0 35px rgba(240, 240, 240, 0.15);
+    }
 }
 
 h2 {

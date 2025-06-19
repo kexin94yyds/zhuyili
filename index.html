@@ -18,6 +18,12 @@
     <!-- 图标 -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230A0A0A'/><circle cx='16' cy='16' r='10' stroke='%234CAF50' stroke-width='2' fill='none'/><line x1='16' y1='16' x2='16' y2='8' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/><line x1='16' y1='16' x2='22' y2='12' stroke='%23fff' stroke-width='1' stroke-linecap='round'/><circle cx='16' cy='16' r='1' fill='%23fff'/></svg>">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><rect width='180' height='180' fill='%230A0A0A'/><circle cx='90' cy='90' r='55' stroke='%234CAF50' stroke-width='7' fill='none'/><line x1='90' y1='90' x2='90' y2='65' stroke='%23fff' stroke-width='5' stroke-linecap='round'/><line x1='90' y1='90' x2='125' y2='75' stroke='%23fff' stroke-width='3' stroke-linecap='round'/><circle cx='90' cy='90' r='3' fill='%23fff'/></svg>">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Rajdhani:wght@300;400;500;600&family=Exo+2:wght@200;300;400;500;600&family=Titillium+Web:wght@200;300;400;600&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="annual_table_styles.css">
     <!-- 引入Chart.js库 -->
@@ -217,80 +223,7 @@
             });
         }
 
-        // PWA安装提示
-        let deferredPrompt;
-        const installButton = document.createElement('button');
-        installButton.textContent = '安装APP';
-        installButton.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            display: block;
-        `;
-        
-        // 立即显示安装按钮
-        document.addEventListener('DOMContentLoaded', () => {
-            document.body.appendChild(installButton);
-        });
-
-        // 监听PWA安装事件
-        window.addEventListener('beforeinstallprompt', (e) => {
-            console.log('PWA可以安装');
-            e.preventDefault();
-            deferredPrompt = e;
-            
-            // 显示安装按钮
-            installButton.style.display = 'block';
-            document.body.appendChild(installButton);
-            
-            // 添加调试信息
-            alert('PWA安装提示已显示！');
-        });
-
-        // 处理安装按钮点击
-        installButton.addEventListener('click', async () => {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                
-                if (outcome === 'accepted') {
-                    console.log('用户接受了安装');
-                    alert('APP安装成功！');
-                } else {
-                    console.log('用户拒绝了安装');
-                }
-                
-                deferredPrompt = null;
-                installButton.style.display = 'none';
-            } else {
-                // 提供手动安装指导
-                alert(`请按照以下步骤安装APP：
-                
-Chrome/Edge浏览器：
-1. 点击地址栏右侧的安装图标
-2. 或者点击菜单 → 安装应用
-
-Safari浏览器：
-1. 点击分享按钮
-2. 选择"添加到主屏幕"
-
-如果没有看到安装选项，请确保使用的是支持PWA的浏览器。`);
-            }
-        });
-
-        // 监听PWA安装完成
-        window.addEventListener('appinstalled', (evt) => {
-            console.log('PWA安装完成');
-            installButton.style.display = 'none';
-        });
+        // PWA安装提示已移除
     </script>
     
 
