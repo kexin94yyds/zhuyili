@@ -184,6 +184,41 @@ class MultiStopwatchManager {
                 // 跳转到计时页面
                 window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
             });
+            
+            // 添加Enter键快捷启动
+            activityNameInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    // 添加按钮反馈动画
+                    newStartBtn.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        newStartBtn.style.transform = '';
+                    }, 150);
+                    
+                    const activityName = activityNameInput.value.trim();
+                    
+                    if (!activityName) {
+                        alert('请输入活动名称');
+                        return;
+                    }
+
+                    // 创建计时器并跳转到计时页面
+                    this.getTimer(activityName);
+                    this.saveData();
+                    
+                    // 跳转到计时页面
+                    window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
+                }
+            });
+            
+            // 添加输入框焦点状态反馈
+            activityNameInput.addEventListener('focus', () => {
+                newStartBtn.style.boxShadow = '0 6px 20px rgba(74, 144, 226, 0.4)';
+            });
+            
+            activityNameInput.addEventListener('blur', () => {
+                newStartBtn.style.boxShadow = '';
+            });
         }
 
         // 隐藏旧的当前活动区域

@@ -116,6 +116,28 @@ function initApp() {
     endButton.addEventListener('click', endActivity);
     showStatsButton.addEventListener('click', showStatistics);
     
+    // 添加Enter键快捷启动
+    activityNameInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            // 添加按键反馈动画
+            startButton.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                startButton.style.transform = '';
+            }, 150);
+            startActivity();
+        }
+    });
+    
+    // 添加输入框焦点状态反馈
+    activityNameInput.addEventListener('focus', function() {
+        startButton.style.boxShadow = '0 6px 20px rgba(74, 144, 226, 0.4)';
+    });
+    
+    activityNameInput.addEventListener('blur', function() {
+        startButton.style.boxShadow = '';
+    });
+    
     // 添加统计视图切换事件监听器
     dailyDistributionBtn.addEventListener('click', () => updateStatsView(STATS_VIEW.DAILY_DISTRIBUTION));
     activityDailyBtn.addEventListener('click', () => {
