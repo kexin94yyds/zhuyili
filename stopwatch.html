@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>时间追踪器 - 计时</title>
+    
+    <!-- PWA Meta标签 -->
+    <meta name="description" content="多活动独立计时器应用，支持并行计时和详细统计">
+    <meta name="theme-color" content="#0A0A0A">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="时间追踪器">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- 图标 -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230A0A0A'/><circle cx='16' cy='16' r='10' stroke='%234CAF50' stroke-width='2' fill='none'/><line x1='16' y1='16' x2='16' y2='8' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/><line x1='16' y1='16' x2='22' y2='12' stroke='%23fff' stroke-width='1' stroke-linecap='round'/><circle cx='16' cy='16' r='1' fill='%23fff'/></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><rect width='180' height='180' fill='%230A0A0A'/><circle cx='90' cy='90' r='55' stroke='%234CAF50' stroke-width='7' fill='none'/><line x1='90' y1='90' x2='90' y2='65' stroke='%23fff' stroke-width='5' stroke-linecap='round'/><line x1='90' y1='90' x2='125' y2='75' stroke='%23fff' stroke-width='3' stroke-linecap='round'/><circle cx='90' cy='90' r='3' fill='%23fff'/></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0A0A0A;
+            color: #FFFFFF;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 标题栏 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .activity-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #FFFFFF;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .back-btn, .switch-btn {
+            background: #333;
+            border: none;
+            color: #FFFFFF;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .back-btn:hover, .switch-btn:hover {
+            background: #555;
+        }
+
+        /* 主显示区 */
+        .main-display {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .time-display {
+            font-size: 4rem;
+            font-weight: 300;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            color: #FFFFFF;
+            text-align: center;
+            margin-bottom: 40px;
+            letter-spacing: 0.1em;
+        }
+
+        /* 按钮区域 */
+        .button-area {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .control-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .reset-btn {
+            background-color: #666;
+            color: #FFFFFF;
+        }
+
+        .reset-btn:hover {
+            background-color: #777;
+        }
+
+        .start-btn {
+            background-color: #4CAF50;
+            color: #FFFFFF;
+        }
+
+        .start-btn:hover {
+            background-color: #45a049;
+        }
+
+        .stop-btn {
+            background-color: #f44336;
+            color: #FFFFFF;
+        }
+
+        .stop-btn:hover {
+            background-color: #da190b;
+        }
+
+        .lap-btn {
+            background-color: #2196F3;
+            color: #FFFFFF;
+        }
+
+        .lap-btn:hover {
+            background-color: #0b7dda;
+        }
+
+        /* Lap 列表 */
+        .lap-container {
+            flex: 1;
+            background-color: #111;
+            border-radius: 20px 20px 0 0;
+            padding: 20px;
+            overflow-y: auto;
+            margin: 0 20px;
+        }
+
+        .lap-header {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px 15px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #999;
+        }
+
+        .lap-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 20px;
+            border-bottom: 1px solid #222;
+            align-items: center;
+        }
+
+        .lap-item:last-child {
+            border-bottom: none;
+        }
+
+        .lap-number {
+            font-weight: bold;
+            color: #FFFFFF;
+            min-width: 80px;
+        }
+
+        .lap-split {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            color: #999;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .lap-total {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            color: #FFFFFF;
+            min-width: 120px;
+            text-align: right;
+        }
+
+        /* 状态指示器 */
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 10px;
+        }
+
+        .status-running {
+            background-color: #4CAF50;
+        }
+
+        .status-paused {
+            background-color: #FF9800;
+        }
+
+        .status-stopped {
+            background-color: #666;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .time-display {
+                font-size: 3rem;
+            }
+            
+            .control-btn {
+                width: 100px;
+                height: 100px;
+                font-size: 16px;
+            }
+            
+            .button-area {
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 标题栏 -->
+    <div class="header">
+        <div class="activity-title" id="activity-title">
+            活动名称
+            <span class="status-indicator" id="status-indicator"></span>
+        </div>
+        <div class="header-controls">
+            <select class="switch-btn" id="activity-switcher">
+                <option value="">切换活动</option>
+            </select>
+            <button class="back-btn" id="back-btn" onclick="goBack()">返回</button>
+        </div>
+    </div>
+
+    <!-- 主显示区 -->
+    <div class="main-display">
+        <div class="time-display" id="time-display">00:00:00.00</div>
+        
+        <!-- 按钮区域 -->
+        <div class="button-area">
+            <button class="control-btn reset-btn" id="left-btn">重置</button>
+            <button class="control-btn start-btn" id="right-btn">开始</button>
+        </div>
+    </div>
+
+    <!-- Lap 列表 -->
+    <div class="lap-container">
+        <div class="lap-header">
+            <span>Lap No.</span>
+            <span>Split</span>
+            <span>Total</span>
+        </div>
+        <div id="lap-list">
+            <!-- Lap 记录将在这里动态添加 -->
+        </div>
+    </div>
+
+    <script>
+        // 获取URL参数中的活动名称
+        function getActivityName() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('activity') || '未知活动';
+        }
+
+        // 多活动计时器管理器
+        class MultiStopwatchManager {
+            constructor() {
+                this.timers = new Map(); // 存储所有活动的计时器
+                this.loadData();
+            }
+
+            // 创建或获取活动计时器
+            getTimer(activityName) {
+                if (!this.timers.has(activityName)) {
+                    this.timers.set(activityName, {
+                        name: activityName,
+                        startTime: null,
+                        elapsedTime: 0,
+                        isRunning: false,
+                        laps: [],
+                        intervalId: null
+                    });
+                }
+                return this.timers.get(activityName);
+            }
+
+            // 开始计时
+            start(activityName) {
+                const timer = this.getTimer(activityName);
+                if (!timer.isRunning) {
+                    timer.startTime = Date.now() - timer.elapsedTime;
+                    timer.isRunning = true;
+                    this.saveData();
+                }
+            }
+
+            // 停止计时
+            stop(activityName) {
+                const timer = this.getTimer(activityName);
+                if (timer.isRunning) {
+                    timer.elapsedTime = Date.now() - timer.startTime;
+                    timer.isRunning = false;
+                    this.saveData();
+                }
+            }
+
+            // 重置计时器
+            reset(activityName) {
+                const timer = this.getTimer(activityName);
+                timer.startTime = null;
+                timer.elapsedTime = 0;
+                timer.isRunning = false;
+                timer.laps = [];
+                this.saveData();
+            }
+
+            // 添加Lap
+            addLap(activityName) {
+                const timer = this.getTimer(activityName);
+                if (timer.isRunning) {
+                    const currentTime = Date.now() - timer.startTime;
+                    const lastLapTime = timer.laps.length > 0 ? timer.laps[timer.laps.length - 1].total : 0;
+                    
+                    timer.laps.push({
+                        number: timer.laps.length + 1,
+                        split: currentTime - lastLapTime,
+                        total: currentTime
+                    });
+                    this.saveData();
+                }
+            }
+
+            // 获取当前时间
+            getCurrentTime(activityName) {
+                const timer = this.getTimer(activityName);
+                if (timer.isRunning) {
+                    return Date.now() - timer.startTime;
+                } else {
+                    return timer.elapsedTime;
+                }
+            }
+
+            // 获取所有活动列表
+            getAllActivities() {
+                return Array.from(this.timers.keys());
+            }
+
+            // 保存数据
+            saveData() {
+                const data = {};
+                this.timers.forEach((timer, name) => {
+                    data[name] = {
+                        ...timer,
+                        intervalId: null // 不保存intervalId
+                    };
+                });
+                localStorage.setItem('multiStopwatchData', JSON.stringify(data));
+            }
+
+            // 加载数据
+            loadData() {
+                const data = localStorage.getItem('multiStopwatchData');
+                if (data) {
+                    try {
+                        const parsed = JSON.parse(data);
+                        Object.entries(parsed).forEach(([name, timer]) => {
+                            this.timers.set(name, {
+                                ...timer,
+                                intervalId: null
+                            });
+                        });
+                    } catch (error) {
+                        console.error('加载数据失败:', error);
+                    }
+                }
+            }
+        }
+
+        // 全局变量
+        let manager = new MultiStopwatchManager();
+        let currentActivity = getActivityName();
+        let updateInterval = null;
+
+        // DOM 元素
+        const activityTitle = document.getElementById('activity-title');
+        const timeDisplay = document.getElementById('time-display');
+        const leftBtn = document.getElementById('left-btn');
+        const rightBtn = document.getElementById('right-btn');
+        const lapList = document.getElementById('lap-list');
+        const statusIndicator = document.getElementById('status-indicator');
+        const activitySwitcher = document.getElementById('activity-switcher');
+
+        // 格式化时间显示
+        function formatTime(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            const ms = Math.floor((milliseconds % 1000) / 10);
+
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+        }
+
+        // 更新显示
+        function updateDisplay() {
+            const timer = manager.getTimer(currentActivity);
+            const currentTime = manager.getCurrentTime(currentActivity);
+            
+            timeDisplay.textContent = formatTime(currentTime);
+            
+            // 更新状态指示器
+            statusIndicator.className = 'status-indicator';
+            if (timer.isRunning) {
+                statusIndicator.classList.add('status-running');
+            } else if (timer.elapsedTime > 0) {
+                statusIndicator.classList.add('status-paused');
+            } else {
+                statusIndicator.classList.add('status-stopped');
+            }
+            
+            // 更新按钮状态
+            updateButtons();
+            
+            // 更新Lap列表
+            updateLapList();
+        }
+
+        // 更新按钮状态
+        function updateButtons() {
+            const timer = manager.getTimer(currentActivity);
+            
+            if (timer.isRunning) {
+                // 计时进行中：下一段 | 停止
+                leftBtn.textContent = '下一段';
+                leftBtn.className = 'control-btn lap-btn';
+                rightBtn.textContent = '停止';
+                rightBtn.className = 'control-btn stop-btn';
+            } else if (timer.elapsedTime > 0) {
+                // 暂停状态：重置 | 开始（继续）
+                leftBtn.textContent = '重置';
+                leftBtn.className = 'control-btn reset-btn';
+                rightBtn.textContent = '继续';
+                rightBtn.className = 'control-btn start-btn';
+            } else {
+                // 初始状态：重置 | 开始
+                leftBtn.textContent = '重置';
+                leftBtn.className = 'control-btn reset-btn';
+                rightBtn.textContent = '开始';
+                rightBtn.className = 'control-btn start-btn';
+            }
+        }
+
+        // 更新Lap列表
+        function updateLapList() {
+            const timer = manager.getTimer(currentActivity);
+            lapList.innerHTML = '';
+            
+            // 倒序显示Lap（最新的在前面）
+            timer.laps.slice().reverse().forEach(lap => {
+                const lapItem = document.createElement('div');
+                lapItem.className = 'lap-item';
+                lapItem.innerHTML = `
+                    <span class="lap-number">Lap ${lap.number}</span>
+                    <span class="lap-split">${formatTime(lap.split)}</span>
+                    <span class="lap-total">${formatTime(lap.total)}</span>
+                `;
+                lapList.appendChild(lapItem);
+            });
+        }
+
+        // 更新活动切换器
+        function updateActivitySwitcher() {
+            const activities = manager.getAllActivities();
+            activitySwitcher.innerHTML = '<option value="">切换活动</option>';
+            
+            activities.forEach(activity => {
+                if (activity !== currentActivity) {
+                    const option = document.createElement('option');
+                    option.value = activity;
+                    option.textContent = activity;
+                    activitySwitcher.appendChild(option);
+                }
+            });
+        }
+
+        // 左按钮点击事件
+        leftBtn.addEventListener('click', () => {
+            const timer = manager.getTimer(currentActivity);
+            
+            if (timer.isRunning) {
+                // 添加Lap
+                manager.addLap(currentActivity);
+            } else {
+                // 重置
+                manager.reset(currentActivity);
+            }
+            updateDisplay();
+        });
+
+        // 右按钮点击事件
+        rightBtn.addEventListener('click', () => {
+            const timer = manager.getTimer(currentActivity);
+            
+            if (timer.isRunning) {
+                // 停止
+                manager.stop(currentActivity);
+            } else {
+                // 开始
+                manager.start(currentActivity);
+            }
+            updateDisplay();
+        });
+
+        // 活动切换
+        activitySwitcher.addEventListener('change', (e) => {
+            if (e.target.value) {
+                window.location.href = `stopwatch.html?activity=${encodeURIComponent(e.target.value)}`;
+            }
+        });
+
+        // 返回主页
+        function goBack() {
+            window.location.href = 'index.html';
+        }
+
+        // 开始更新循环
+        function startUpdateLoop() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+            updateInterval = setInterval(updateDisplay, 10); // 每10ms更新一次，实现毫秒级精度
+        }
+
+        // 初始化
+        function init() {
+            activityTitle.textContent = currentActivity;
+            updateDisplay();
+            updateActivitySwitcher();
+            startUpdateLoop();
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('load', init);
+
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', () => {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>时间追踪器</title>
+    
+    <!-- PWA Meta标签 -->
+    <meta name="description" content="多活动独立计时器应用，支持并行计时和详细统计">
+    <meta name="theme-color" content="#0A0A0A">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="时间追踪器">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- 图标 -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230A0A0A'/><circle cx='16' cy='16' r='10' stroke='%234CAF50' stroke-width='2' fill='none'/><line x1='16' y1='16' x2='16' y2='8' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/><line x1='16' y1='16' x2='22' y2='12' stroke='%23fff' stroke-width='1' stroke-linecap='round'/><circle cx='16' cy='16' r='1' fill='%23fff'/></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><rect width='180' height='180' fill='%230A0A0A'/><circle cx='90' cy='90' r='55' stroke='%234CAF50' stroke-width='7' fill='none'/><line x1='90' y1='90' x2='90' y2='65' stroke='%23fff' stroke-width='5' stroke-linecap='round'/><line x1='90' y1='90' x2='125' y2='75' stroke='%23fff' stroke-width='3' stroke-linecap='round'/><circle cx='90' cy='90' r='3' fill='%23fff'/></svg>">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="annual_table_styles.css">
+    <!-- 引入Chart.js库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            overflow-x: hidden;
+            background-color: #0A0A0A;
+        }
+        
+        body {
+            position: relative;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 0;
+            background-color: #0A0A0A;
+        }
+        
+        section {
+            width: 100%;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+
+    <div class="container">
+        <header>
+            <h1>时间追踪器</h1>
+            <div class="header-controls">
+                <button id="export-btn" class="btn utility-btn">导出数据</button>
+                <button id="import-btn" class="btn utility-btn">导入数据</button>
+                <div id="current-time" class="current-time"></div>
+            </div>
+        </header>
+
+        <section class="activity-input">
+            <input type="text" id="activity-name" placeholder="输入活动名称（如：编程学习、跑步、练口语）">
+            <button id="start-btn" class="btn primary-btn">开始记录</button>
+        </section>
+
+        <!-- 新增：多活动管理区域 -->
+        <section class="multi-stopwatch-section">
+            <h2>活动计时器</h2>
+            <div id="activity-timers" class="activity-timers">
+                <div id="no-timers" class="no-timers">暂无活动计时器</div>
+            </div>
+        </section>
+
+        <section class="current-activity" id="current-activity-section">
+            <h2>当前活动</h2>
+            <div id="no-activity" class="no-activity">当前没有正在进行的活动</div>
+            <div id="activity-details" class="activity-details hidden">
+                <div class="activity-name" id="current-activity-name"></div>
+                <div class="activity-time">
+                    <div>开始时间: <span id="start-time"></span></div>
+                    <div>已持续: <span id="duration"></span></div>
+                </div>
+                <button id="end-btn" class="btn secondary-btn">结束活动</button>
+            </div>
+        </section>
+
+        <!-- 新增统计部分 -->
+        <section class="statistics">
+            <h2>时间统计</h2>
+            <div class="stats-view-controls">
+                <div class="stats-view-title">统计视图：</div>
+                <div class="stats-view-options">
+                    <button id="daily-distribution-btn" class="stats-view-btn active">当日活动分布</button>
+                    <button id="activity-daily-btn" class="stats-view-btn">活动每日统计</button>
+                    <button id="activity-total-btn" class="stats-view-btn">活动累计统计</button>
+                    <button id="annual-table-btn" class="stats-view-btn">年度统计表</button>
+                </div>
+                <div id="activity-selector" class="hidden">
+                    <label>选择活动：</label>
+                    <select id="activity-select"></select>
+                </div>
+                <div id="annual-table-controls" class="annual-table-controls hidden">
+                    <div class="control-group">
+                        <label for="annual-year-select">选择年份：</label>
+                        <select id="annual-year-select"></select>
+                    </div>
+                    <div class="control-group">
+                        <label for="annual-activity-select">选择活动：</label>
+                        <select id="annual-activity-select">
+                            <option value="all">所有活动</option>
+                            <!-- 动态填充活动选项 -->
+                        </select>
+                    </div>
+                    <button id="show-annual-table-btn" class="btn primary-btn">显示统计表</button>
+                </div>
+            </div>
+            <div class="date-selector">
+                <label for="stats-date">选择日期：</label>
+                <input type="date" id="stats-date">
+                <button id="show-stats-btn" class="btn primary-btn">显示统计</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="time-chart"></canvas>
+            </div>
+            <div id="annual-table-container" class="annual-table-container hidden">
+                <table id="annual-table" class="annual-table">
+                    <thead>
+                        <tr>
+                            <th class="day-header">日期</th>
+                            <th>1月</th>
+                            <th>2月</th>
+                            <th>3月</th>
+                            <th>4月</th>
+                            <th>5月</th>
+                            <th>6月</th>
+                            <th>7月</th>
+                            <th>8月</th>
+                            <th>9月</th>
+                            <th>10月</th>
+                            <th>11月</th>
+                            <th>12月</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 动态生成31行（1-31日） -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="no-stats" class="no-stats">所选日期没有活动记录</div>
+            <div id="stats-summary" class="stats-summary"></div>
+        </section>
+
+        <section class="timeline">
+            <h2>活动记录</h2>
+            <div id="activity-list" class="activity-list">
+                <div id="no-records" class="no-records">暂无活动记录</div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 导入数据模态框 -->
+    <div id="import-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>导入数据</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>请选择要导入的数据文件（JSON格式）：</p>
+                <input type="file" id="import-file" accept=".json">
+                
+                <div class="import-options">
+                    <p>导入模式：</p>
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="import-mode" value="replace" checked>
+                            替换当前数据
+                        </label>
+                        <label>
+                            <input type="radio" name="import-mode" value="merge">
+                            合并到当前数据
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="import-message" id="import-message"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-import" class="btn utility-btn">取消</button>
+                <button id="confirm-import" class="btn primary-btn">导入</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="export_import.js"></script>
+    <script src="combined.js"></script>
+    <script src="multi-stopwatch.js"></script>
+
+    <!-- PWA Service Worker 注册 -->
+    <script>
+        // 注册Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker 注册成功:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker 注册失败:', error);
+                    });
+            });
+        }
+
+        // PWA安装提示
+        let deferredPrompt;
+        const installButton = document.createElement('button');
+        installButton.textContent = '安装APP';
+        installButton.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            display: block;
+        `;
+        
+        // 立即显示安装按钮
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.appendChild(installButton);
+        });
+
+        // 监听PWA安装事件
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('PWA可以安装');
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // 显示安装按钮
+            installButton.style.display = 'block';
+            document.body.appendChild(installButton);
+            
+            // 添加调试信息
+            alert('PWA安装提示已显示！');
+        });
+
+        // 处理安装按钮点击
+        installButton.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                
+                if (outcome === 'accepted') {
+                    console.log('用户接受了安装');
+                    alert('APP安装成功！');
+                } else {
+                    console.log('用户拒绝了安装');
+                }
+                
+                deferredPrompt = null;
+                installButton.style.display = 'none';
+            } else {
+                // 提供手动安装指导
+                alert(`请按照以下步骤安装APP：
+                
+Chrome/Edge浏览器：
+1. 点击地址栏右侧的安装图标
+2. 或者点击菜单 → 安装应用
+
+Safari浏览器：
+1. 点击分享按钮
+2. 选择"添加到主屏幕"
+
+如果没有看到安装选项，请确保使用的是支持PWA的浏览器。`);
+            }
+        });
+
+        // 监听PWA安装完成
+        window.addEventListener('appinstalled', (evt) => {
+            console.log('PWA安装完成');
+            installButton.style.display = 'none';
+        });
+    </script>
+    
+
+</body>
+</html>
