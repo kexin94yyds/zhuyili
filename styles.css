@@ -33,19 +33,22 @@ html, body {
 /* 头部样式 */
 header {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     margin: 0;
     padding: 10px 20px;
     border-bottom: 1px solid #333;
     width: 100vw;
     background-color: #111;
+    position: relative;
 }
 
 .header-controls {
     display: flex;
     align-items: center;
     gap: 10px;
+    position: absolute;
+    right: 20px;
 }
 
 h1 {
