@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>导入导出功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #111;
+            color: #fff;
+        }
+        .test-section {
+            background: #222;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #357abd;
+        }
+        .result {
+            background: #333;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <h1>导入导出功能测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 检查当前数据</h2>
+        <button onclick="checkCurrentData()">检查当前localStorage数据</button>
+        <div id="current-data" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. 添加测试数据</h2>
+        <button onclick="addTestData()">添加测试数据</button>
+        <div id="test-data-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. 测试导出功能</h2>
+        <button onclick="testExport()">测试导出</button>
+        <div id="export-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. 测试导入功能</h2>
+        <input type="file" id="import-file" accept=".json">
+        <button onclick="testImport()">测试导入</button>
+        <div id="import-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. 清空所有数据</h2>
+        <button onclick="clearAllData()" style="background: #e74c3c;">清空所有localStorage数据</button>
+        <div id="clear-result" class="result"></div>
+    </div>
+
+    <script>
+        // 检查当前数据
+        function checkCurrentData() {
+            const result = document.getElementById('current-data');
+            const data = {
+                activities: JSON.parse(localStorage.getItem('activities') || '[]'),
+                currentActivity: JSON.parse(localStorage.getItem('currentActivity') || 'null'),
+                timeTrackerData: JSON.parse(localStorage.getItem('timeTrackerData') || 'null'),
+                multiStopwatchData: JSON.parse(localStorage.getItem('multiStopwatchData') || 'null'),
+                timeTrackerActivities: JSON.parse(localStorage.getItem('timeTrackerActivities') || '[]')
+            };
+            
+            result.textContent = `当前localStorage数据：
+Activities: ${data.activities.length} 条记录
+Current Activity: ${data.currentActivity ? '有' : '无'}
+Time Tracker Data: ${data.timeTrackerData ? '有' : '无'}
+Multi Stopwatch Data: ${data.multiStopwatchData ? '有' : '无'}
+Time Tracker Activities: ${data.timeTrackerActivities.length} 条记录
+
+详细数据：
+${JSON.stringify(data, null, 2)}`;
+        }
+
+        // 添加测试数据
+        function addTestData() {
+            const testActivities = [
+                {
+                    id: 'test-1',
+                    activityName: '测试活动1',
+                    startTime: new Date(Date.now() - 3600000),
+                    endTime: new Date(Date.now() - 1800000),
+                    duration: 30
+                },
+                {
+                    id: 'test-2',
+                    activityName: '测试活动2',
+                    startTime: new Date(Date.now() - 7200000),
+                    endTime: new Date(Date.now() - 5400000),
+                    duration: 30
+                }
+            ];
+
+            const testCurrentActivity = {
+                id: 'test-current',
+                activityName: '当前测试活动',
+                startTime: new Date(),
+                endTime: null,
+                duration: 0
+            };
+
+            const testMultiStopwatch = {
+                'test-timer-1': {
+                    name: '测试计时器1',
+                    startTime: Date.now() - 600000,
+                    elapsedTime: 600000,
+                    isRunning: true
+                }
+            };
+
+            localStorage.setItem('activities', JSON.stringify(testActivities));
+            localStorage.setItem('currentActivity', JSON.stringify(testCurrentActivity));
+            localStorage.setItem('multiStopwatchData', JSON.stringify(testMultiStopwatch));
+
+            document.getElementById('test-data-result').textContent = '测试数据已添加！';
+        }
+
+        // 测试导出功能
+        function testExport() {
+            try {
+                // 复制导出函数的逻辑
+                const activities = JSON.parse(localStorage.getItem('activities') || '[]');
+                const currentActivity = JSON.parse(localStorage.getItem('currentActivity') || 'null');
+                const timeTrackerData = JSON.parse(localStorage.getItem('timeTrackerData') || 'null');
+                const multiStopwatchData = JSON.parse(localStorage.getItem('multiStopwatchData') || 'null');
+                const timeTrackerActivities = JSON.parse(localStorage.getItem('timeTrackerActivities') || '[]');
+                
+                const exportData = {
+                    version: "2.0",
+                    exportDate: new Date().toISOString(),
+                    appName: "Attention—Span—Tracker",
+                    data: {
+                        activities: activities,
+                        currentActivity: currentActivity,
+                        multiStopwatchData: multiStopwatchData,
+                        timeTrackerData: timeTrackerData,
+                        timeTrackerActivities: timeTrackerActivities,
+                        exportInfo: {
+                            totalActivities: activities.length,
+                            hasCurrentActivity: currentActivity !== null,
+                            hasMultiStopwatch: multiStopwatchData !== null,
+                            exportTimestamp: Date.now()
+                        }
+                    }
+                };
+
+                const jsonString = JSON.stringify(exportData, null, 2);
+                
+                document.getElementById('export-result').textContent = `导出测试成功！
+生成的JSON大小: ${jsonString.length} 字符
+包含数据:
+- Activities: ${activities.length} 条
+- Current Activity: ${currentActivity ? '有' : '无'}
+- Multi Stopwatch: ${multiStopwatchData ? '有' : '无'}
+
+预览（前500字符）:
+${jsonString.substring(0, 500)}...`;
+
+                // 实际触发下载
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(blob);
+                const date = new Date();
+                const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const formattedTime = `${String(date.getHours()).padStart(2, '0')}-${String(date.getMinutes()).padStart(2, '0')}`;
+                downloadLink.download = `TEST_Attention_Span_Tracker_${formattedDate}_${formattedTime}.json`;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(downloadLink.href);
+
+            } catch (error) {
+                document.getElementById('export-result').textContent = `导出测试失败: ${error.message}`;
+            }
+        }
+
+        // 测试导入功能
+        function testImport() {
+            const fileInput = document.getElementById('import-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                document.getElementById('import-result').textContent = '请先选择一个JSON文件';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    
+                    // 验证数据格式
+                    const isValid = validateImportData(importedData);
+                    
+                    document.getElementById('import-result').textContent = `导入测试结果:
+文件名: ${file.name}
+文件大小: ${file.size} 字节
+数据有效: ${isValid ? '是' : '否'}
+版本: ${importedData.version || '未知'}
+导出日期: ${importedData.exportDate || '未知'}
+Activities数量: ${importedData.data?.activities?.length || 0}
+
+预览数据:
+${JSON.stringify(importedData, null, 2).substring(0, 500)}...`;
+
+                } catch (error) {
+                    document.getElementById('import-result').textContent = `导入测试失败: ${error.message}`;
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // 验证导入数据格式
+        function validateImportData(data) {
+            if (!data || typeof data !== 'object') return false;
+            if (!data.version || !data.exportDate || !data.data) return false;
+            if (!Array.isArray(data.data.activities)) return false;
+            if (data.version !== "1.0" && data.version !== "2.0") return false;
+            return true;
+        }
+
+        // 清空所有数据
+        function clearAllData() {
+            localStorage.removeItem('activities');
+            localStorage.removeItem('currentActivity');
+            localStorage.removeItem('timeTrackerData');
+            localStorage.removeItem('multiStopwatchData');
+            localStorage.removeItem('timeTrackerActivities');
+            
+            document.getElementById('clear-result').textContent = '所有localStorage数据已清空！';
+        }
+
+        // 初始检查
+        checkCurrentData();
+    </script>
+</body>
+</html> 

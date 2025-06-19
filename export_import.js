@@ -2,12 +2,23 @@
 
 // 导出数据到JSON文件
 function exportData() {
-    // 从localStorage获取所有相关数据
-    const activities = JSON.parse(localStorage.getItem('activities') || '[]');
-    const currentActivity = JSON.parse(localStorage.getItem('currentActivity') || 'null');
-    const timeTrackerData = JSON.parse(localStorage.getItem('timeTrackerData') || 'null');
-    const multiStopwatchData = JSON.parse(localStorage.getItem('multiStopwatchData') || 'null');
-    const timeTrackerActivities = JSON.parse(localStorage.getItem('timeTrackerActivities') || '[]');
+    try {
+        console.log('开始导出数据...');
+        
+        // 从localStorage获取所有相关数据
+        const activities = JSON.parse(localStorage.getItem('activities') || '[]');
+        const currentActivity = JSON.parse(localStorage.getItem('currentActivity') || 'null');
+        const timeTrackerData = JSON.parse(localStorage.getItem('timeTrackerData') || 'null');
+        const multiStopwatchData = JSON.parse(localStorage.getItem('multiStopwatchData') || 'null');
+        const timeTrackerActivities = JSON.parse(localStorage.getItem('timeTrackerActivities') || '[]');
+        
+        console.log('获取到的数据:', {
+            activitiesCount: activities.length,
+            hasCurrentActivity: currentActivity !== null,
+            hasTimeTrackerData: timeTrackerData !== null,
+            hasMultiStopwatchData: multiStopwatchData !== null,
+            timeTrackerActivitiesCount: timeTrackerActivities.length
+        });
     
     // 创建导出数据对象，包含完整的数据
     const exportData = {
@@ -59,6 +70,13 @@ function exportData() {
     
     // 释放URL对象
     URL.revokeObjectURL(downloadLink.href);
+    
+    console.log('导出完成！');
+    
+    } catch (error) {
+        console.error('导出数据时出错:', error);
+        alert('导出失败: ' + error.message);
+    }
 }
 
 // 导入数据
@@ -128,24 +146,36 @@ function validateImportData(data) {
 function replaceAllData(importedData) {
     console.log('正在替换所有数据...', importedData);
     
-    // 主要数据
-    localStorage.setItem('activities', JSON.stringify(importedData.activities || []));
-    localStorage.setItem('currentActivity', JSON.stringify(importedData.currentActivity || null));
-    
-    // 多计时器数据
-    if (importedData.multiStopwatchData) {
-        localStorage.setItem('multiStopwatchData', JSON.stringify(importedData.multiStopwatchData));
+    try {
+        // 主要数据
+        localStorage.setItem('activities', JSON.stringify(importedData.activities || []));
+        localStorage.setItem('currentActivity', JSON.stringify(importedData.currentActivity || null));
+        
+        // 多计时器数据
+        if (importedData.multiStopwatchData) {
+            localStorage.setItem('multiStopwatchData', JSON.stringify(importedData.multiStopwatchData));
+        } else {
+            localStorage.removeItem('multiStopwatchData');
+        }
+        
+        // 兼容数据
+        if (importedData.timeTrackerData) {
+            localStorage.setItem('timeTrackerData', JSON.stringify(importedData.timeTrackerData));
+        } else {
+            localStorage.removeItem('timeTrackerData');
+        }
+        
+        if (importedData.timeTrackerActivities && importedData.timeTrackerActivities.length > 0) {
+            localStorage.setItem('timeTrackerActivities', JSON.stringify(importedData.timeTrackerActivities));
+        } else {
+            localStorage.removeItem('timeTrackerActivities');
+        }
+        
+        console.log('数据替换完成');
+    } catch (error) {
+        console.error('替换数据时出错:', error);
+        throw error;
     }
-    
-    // 兼容数据
-    if (importedData.timeTrackerData) {
-        localStorage.setItem('timeTrackerData', JSON.stringify(importedData.timeTrackerData));
-    }
-    if (importedData.timeTrackerActivities) {
-        localStorage.setItem('timeTrackerActivities', JSON.stringify(importedData.timeTrackerActivities));
-    }
-    
-    console.log('数据替换完成');
 }
 
 // 合并导入的数据到当前数据
