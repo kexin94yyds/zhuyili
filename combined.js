@@ -125,11 +125,15 @@ function initApp() {
     activityNameInput.addEventListener('keypress', function(event) {
         if (event.key === 'Enter') {
             event.preventDefault();
+            console.log('Enter键被按下，开始启动活动...');
+            
             // 添加按键反馈动画
             startButton.style.transform = 'scale(0.95)';
             setTimeout(() => {
                 startButton.style.transform = '';
             }, 150);
+            
+            // 调用开始活动函数
             startActivity();
         }
     });
@@ -176,20 +180,15 @@ function updateCurrentTime() {
 // 开始新活动
 function startActivity() {
     const activityName = activityNameInput.value.trim();
+    console.log('startActivity被调用，活动名称:', activityName);
     
     if (!activityName) {
         alert('请输入活动名称');
         return;
     }
     
-    // 确保多计时器管理器存在
-    if (typeof window.multiStopwatchManager !== 'undefined') {
-        // 创建计时器
-        window.multiStopwatchManager.getTimer(activityName);
-        window.multiStopwatchManager.saveData();
-    }
-    
-    // 跳转到计时页面
+    console.log('准备跳转到计时页面...');
+    // 直接跳转到计时页面
     window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
 }
 
