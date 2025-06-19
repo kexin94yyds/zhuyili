@@ -51,7 +51,7 @@ function importData(file, mode) {
             
             // 验证数据格式
             if (!validateImportData(importedData)) {
-                showImportMessage('数据格式错误，请确保导入正确的时间追踪器数据文件。', 'error');
+                showImportMessage('数据格式错误，请确保导入正确的 Attention—Span—Tracker 数据文件。', 'error');
                 return;
             }
             

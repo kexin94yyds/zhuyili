@@ -1,4 +1,4 @@
-# 时间追踪器 (Attention Span Tracker)
+# Attention—Span—Tracker
 
 一个功能强大的时间追踪和专注力管理应用，采用现代化的深色主题设计。
 

@@ -1,4 +1,4 @@
-// Service Worker for 时间追踪器 PWA
+// Service Worker for Attention—Span—Tracker PWA
 const CACHE_NAME = 'time-tracker-v2';
 const urlsToCache = [
   '/',
@@ -94,7 +94,7 @@ self.addEventListener('push', (event) => {
   console.log('Service Worker: 收到推送消息');
   
   const options = {
-    body: event.data ? event.data.text() : '时间追踪器有新消息',
+            body: event.data ? event.data.text() : 'Attention—Span—Tracker有新消息',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
@@ -113,7 +113,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification('时间追踪器', options)
+    self.registration.showNotification('Attention—Span—Tracker', options)
   );
 });
 
