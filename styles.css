@@ -88,11 +88,19 @@ h2 {
     background: linear-gradient(135deg, #4a90e2, #357abd);
     border-color: #4a90e2;
     color: white;
+    padding: 18px 32px;
+    border-radius: 16px;
+    font-size: 16px;
+    font-weight: 600;
+    min-height: 56px;
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .primary-btn:hover {
     background: linear-gradient(135deg, #357abd, #2968a3);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(74, 144, 226, 0.35);
 }
 
 .secondary-btn {
@@ -119,35 +127,53 @@ h2 {
     color: white;
 }
 
-/* 输入区域样式 */
+/* 输入区域样式 - GPT风格 */
 .activity-input {
     display: flex;
-    margin: 20px 0;
-    gap: 10px;
-    padding: 0 20px;
+    margin: 30px 0;
+    gap: 15px;
+    padding: 0 30px;
     width: 100%;
     background-color: transparent;
+    align-items: stretch;
 }
 
 input[type="text"] {
     flex: 1;
-    padding: 12px;
-    border: 1px solid #333;
-    border-radius: 4px;
-    font-size: 16px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #e0e0e0;
-    backdrop-filter: blur(10px);
+    padding: 18px 24px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    font-size: 18px;
+    line-height: 1.4;
+    background: rgba(40, 40, 40, 0.8);
+    color: #ffffff;
+    backdrop-filter: blur(20px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-height: 56px;
+    resize: none;
 }
 
 input[type="text"]:focus {
     outline: none;
     border-color: #4a90e2;
-    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+    background: rgba(50, 50, 50, 0.9);
+    box-shadow: 
+        0 0 0 3px rgba(74, 144, 226, 0.15),
+        0 8px 25px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+input[type="text"]:hover:not(:focus) {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(45, 45, 45, 0.85);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
 }
 
 input[type="text"]::placeholder {
-    color: #666;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 18px;
+    font-weight: 400;
 }
 
 /* 当前活动区域样式 */
@@ -513,6 +539,26 @@ input[type="date"]:focus {
 @media (max-width: 600px) {
     .activity-input, .date-selector {
         flex-direction: column;
+        padding: 0 20px;
+        gap: 12px;
+    }
+    
+    .activity-input {
+        margin: 20px 0;
+    }
+    
+    input[type="text"] {
+        padding: 16px 20px;
+        font-size: 16px;
+        min-height: 52px;
+        border-radius: 14px;
+    }
+    
+    .primary-btn {
+        padding: 16px 28px;
+        min-height: 52px;
+        border-radius: 14px;
+        font-size: 15px;
     }
     
     .activity-time {
