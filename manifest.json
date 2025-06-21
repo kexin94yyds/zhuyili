@@ -11,15 +11,15 @@
   "lang": "zh-CN",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='192' height='192' viewBox='0 0 192 192'><rect width='192' height='192' fill='%230A0A0A'/><circle cx='96' cy='96' r='60' stroke='%234CAF50' stroke-width='8' fill='none'/><line x1='96' y1='96' x2='96' y2='66' stroke='%23fff' stroke-width='6' stroke-linecap='round'/><line x1='96' y1='96' x2='136' y2='76' stroke='%23fff' stroke-width='4' stroke-linecap='round'/><circle cx='96' cy='96' r='4' fill='%23fff'/><text x='96' y='11' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='24' font-weight='bold'>12</text><text x='181' y='104' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='24' font-weight='bold'>3</text><text x='96' y='191' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='24' font-weight='bold'>6</text><text x='11' y='104' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='24' font-weight='bold'>9</text><text x='96' y='216' text-anchor='middle' dominant-baseline='middle' fill='%23fff' font-family='Arial' font-size='16' font-weight='bold'>时间追踪</text></svg>",
+      "src": "assets/时间管道.JPG",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     },
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512'><rect width='512' height='512' fill='%230A0A0A'/><circle cx='256' cy='256' r='160' stroke='%234CAF50' stroke-width='21' fill='none'/><line x1='256' y1='256' x2='256' y2='176' stroke='%23fff' stroke-width='16' stroke-linecap='round'/><line x1='256' y1='256' x2='363' y2='203' stroke='%23fff' stroke-width='11' stroke-linecap='round'/><circle cx='256' cy='256' r='11' fill='%23fff'/><text x='256' y='29' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='64' font-weight='bold'>12</text><text x='483' y='277' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='64' font-weight='bold'>3</text><text x='256' y='512' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='64' font-weight='bold'>6</text><text x='29' y='277' text-anchor='middle' dominant-baseline='middle' fill='%234CAF50' font-family='Arial' font-size='64' font-weight='bold'>9</text><text x='256' y='576' text-anchor='middle' dominant-baseline='middle' fill='%23fff' font-family='Arial' font-size='43' font-weight='bold'>时间追踪</text></svg>",
+      "src": "assets/时间管道.JPG",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ],
