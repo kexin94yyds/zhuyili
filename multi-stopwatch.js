@@ -24,18 +24,37 @@ class MultiStopwatchManager {
 
     // 开始计时
     start(activityName) {
+        console.log(`▶️ 开始计时活动: "${activityName}"`);
+        
         const timer = this.getTimer(activityName);
         if (!timer.isRunning) {
             timer.startTime = Date.now() - timer.elapsedTime;
             timer.isRunning = true;
+            
+            // 启动实时更新间隔
+            if (this.updateIntervals.has(activityName)) {
+                clearInterval(this.updateIntervals.get(activityName));
+            }
+            
+            const intervalId = setInterval(() => {
+                this.updateTimerCard(activityName);
+            }, 100); // 每100ms更新一次
+            
+            this.updateIntervals.set(activityName, intervalId);
+            console.log(`⏱️ 已启动"${activityName}"的更新间隔`);
+            
             this.saveData();
             this.updateMainPageUI();
+            
+            console.log(`✅ 活动 "${activityName}" 已开始计时`);
+        } else {
+            console.log(`⚠️ 活动 "${activityName}" 已经在运行中`);
         }
     }
 
     // 停止计时
     stop(activityName) {
-        console.log(`MultiStopwatchManager: 尝试停止活动 "${activityName}"`);
+        console.log(`⏸️ 尝试停止活动 "${activityName}"`);
         
         const timer = this.getTimer(activityName);
         if (timer.isRunning) {
@@ -43,7 +62,14 @@ class MultiStopwatchManager {
             timer.elapsedTime = endTime - timer.startTime;
             timer.isRunning = false;
             
-            console.log(`MultiStopwatchManager: 活动 "${activityName}" 已停止，用时 ${Math.floor(timer.elapsedTime / 1000)} 秒`);
+            // 清除更新间隔
+            if (this.updateIntervals.has(activityName)) {
+                clearInterval(this.updateIntervals.get(activityName));
+                this.updateIntervals.delete(activityName);
+                console.log(`⏹️ 已清除"${activityName}"的更新间隔`);
+            }
+            
+            console.log(`✅ 活动 "${activityName}" 已停止，用时 ${Math.floor(timer.elapsedTime / 1000)} 秒`);
             
             // 如果计时时间超过1分钟，保存为完成的活动记录
             if (timer.elapsedTime >= 60000) { // 60秒 = 60000毫秒
@@ -53,17 +79,31 @@ class MultiStopwatchManager {
             this.saveData();
             this.updateMainPageUI();
         } else {
-            console.log(`MultiStopwatchManager: 活动 "${activityName}" 未在运行中`);
+            console.log(`⚠️ 活动 "${activityName}" 未在运行中`);
         }
     }
 
     // 重置计时器
     reset(activityName) {
+        console.log(`🔄 重置计时器: "${activityName}"`);
+        
         const timer = this.getTimer(activityName);
+        
+        // 清除更新间隔
+        if (this.updateIntervals.has(activityName)) {
+            clearInterval(this.updateIntervals.get(activityName));
+            this.updateIntervals.delete(activityName);
+            console.log(`⏹️ 已清除"${activityName}"的更新间隔`);
+        }
+        
+        // 重置计时器状态
         timer.startTime = null;
         timer.elapsedTime = 0;
         timer.isRunning = false;
         timer.laps = [];
+        
+        console.log(`✅ 计时器"${activityName}"已重置`);
+        
         this.saveData();
         this.updateMainPageUI();
     }
@@ -367,9 +407,9 @@ class MultiStopwatchManager {
     getActionButtons(timer) {
         if (timer.isRunning) {
             return `
-                <button class="timer-btn secondary" data-action="stop">停止</button>
+                <button class="timer-btn secondary" data-action="stop">暂停</button>
+                <button class="timer-btn primary" data-action="lap">分段</button>
                 <button class="timer-btn primary" data-action="complete">完成</button>
-                <button class="timer-btn danger" data-action="delete">删除</button>
             `;
         } else if (timer.elapsedTime > 0) {
             return `
@@ -392,47 +432,96 @@ class MultiStopwatchManager {
         
         buttons.forEach(button => {
             button.addEventListener('click', (e) => {
-                e.stopPropagation(); // 阻止事件冒泡
+                e.stopPropagation();
                 
                 const action = button.dataset.action;
-                console.log(`MultiStopwatchManager: 按钮点击 - 活动: "${timer.name}", 操作: "${action}"`);
+                console.log(`按钮点击 - 活动: "${timer.name}", 操作: "${action}"`);
                 
-                switch (action) {
-                    case 'start':
-                        this.start(timer.name);
-                        break;
-                    case 'stop':
-                        this.stop(timer.name);
-                        break;
-                    case 'complete':
-                        this.completeActivityAndReset(timer.name);
-                        break;
-                    case 'reset':
-                        if (confirm(`确定要重置"${timer.name}"的计时器吗？这将清除所有数据。`)) {
-                            this.reset(timer.name);
-                        }
-                        break;
-                    case 'delete':
-                        if (confirm(`确定要删除"${timer.name}"计时器吗？`)) {
-                            this.delete(timer.name);
-                        }
-                        break;
-                }
+                this.handleButtonAction(action, timer);
             });
         });
     }
 
+    // 处理按钮操作
+    handleButtonAction(action, timer) {
+        switch (action) {
+            case 'start':
+                this.start(timer.name);
+                break;
+                
+            case 'stop':
+                this.stop(timer.name);
+                break;
+                
+            case 'lap':
+                this.addLap(timer.name);
+                this.showNotification(`已添加第 ${timer.laps.length} 个分段`);
+                break;
+                
+            case 'complete':
+                if (confirm(`确定要完成"${timer.name}"活动吗？这将保存活动记录并重置计时器。`)) {
+                    this.completeActivityAndReset(timer.name);
+                    this.showNotification(`"${timer.name}" 活动已完成并保存`);
+                }
+                break;
+                
+            case 'reset':
+                if (confirm(`确定要重置"${timer.name}"的计时器吗？这将清除当前计时数据。`)) {
+                    this.reset(timer.name);
+                    this.showNotification(`"${timer.name}" 计时器已重置`);
+                }
+                break;
+                
+            case 'delete':
+                if (confirm(`确定要删除"${timer.name}"计时器吗？删除后将无法恢复。`)) {
+                    this.delete(timer.name);
+                    this.showNotification(`"${timer.name}" 计时器已删除`);
+                }
+                break;
+        }
+    }
+
+    // 显示通知
+    showNotification(message) {
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.textContent = message;
+        
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000;
+            animation: slideInRight 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOutRight 0.3s ease-in';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 2000);
+    }
+
     // 启动实时更新
     startRealTimeUpdate() {
-        // 清除现有的更新间隔
-        this.updateIntervals.forEach((intervalId) => {
-            clearInterval(intervalId);
-        });
-        this.updateIntervals.clear();
-
-        // 为运行中的计时器启动更新
+        console.log('🔄 检查并启动实时更新...');
+        
+        // 为运行中的计时器启动更新（如果还没有的话）
         this.timers.forEach((timer, activityName) => {
-            if (timer.isRunning) {
+            if (timer.isRunning && !this.updateIntervals.has(activityName)) {
+                console.log(`⏱️ 为运行中的活动"${activityName}"启动更新间隔`);
+                
                 const intervalId = setInterval(() => {
                     this.updateTimerCard(activityName);
                 }, 100); // 每100ms更新一次
@@ -440,6 +529,8 @@ class MultiStopwatchManager {
                 this.updateIntervals.set(activityName, intervalId);
             }
         });
+        
+        console.log(`✅ 实时更新检查完成，当前活跃间隔数: ${this.updateIntervals.size}`);
     }
 
     // 更新单个计时器卡片
@@ -577,25 +668,59 @@ class MultiStopwatchManager {
 
     // 完成活动并重置计时器
     completeActivityAndReset(activityName) {
+        console.log(`🏁 开始完成活动: "${activityName}"`);
+        
         const timer = this.getTimer(activityName);
         const endTime = Date.now();
         
+        // 首先停止计时器的实时更新
+        if (this.updateIntervals.has(activityName)) {
+            clearInterval(this.updateIntervals.get(activityName));
+            this.updateIntervals.delete(activityName);
+            console.log(`⏹️ 已清除"${activityName}"的更新间隔`);
+        }
+        
+        // 如果计时器正在运行，先停止它
+        if (timer.isRunning) {
+            console.log(`⏸️ 停止正在运行的计时器: "${activityName}"`);
+            timer.elapsedTime = endTime - timer.startTime;
+            timer.isRunning = false;
+        }
+        
         // 只有当计时器有时间记录时才保存
-        if (timer.elapsedTime > 0 || timer.isRunning) {
-            const actualEndTime = timer.isRunning ? endTime : (timer.startTime + timer.elapsedTime);
+        if (timer.elapsedTime > 0) {
+            const actualEndTime = endTime;
             const actualStartTime = timer.startTime || (endTime - timer.elapsedTime);
+            
+            console.log(`💾 保存活动记录: "${activityName}", 用时: ${Math.floor(timer.elapsedTime / 1000)}秒`);
             
             // 保存活动记录
             this.completeActivity(activityName, actualStartTime, actualEndTime);
         }
         
         // 重置计时器
+        console.log(`🔄 重置计时器: "${activityName}"`);
         this.reset(activityName);
         
         // 显示完成提示
         const minutes = Math.floor((timer.elapsedTime || 0) / (1000 * 60));
+        const seconds = Math.floor(((timer.elapsedTime || 0) % (1000 * 60)) / 1000);
+        
+        let timeMessage = '';
         if (minutes > 0) {
-            alert(`活动"${activityName}"已完成！\n总用时: ${minutes} 分钟\n记录已保存到统计中。`);
+            timeMessage = `${minutes} 分钟 ${seconds} 秒`;
+        } else if (seconds > 0) {
+            timeMessage = `${seconds} 秒`;
+        } else {
+            timeMessage = '0 秒';
+        }
+        
+        console.log(`✅ 活动"${activityName}"已完成，总用时: ${timeMessage}`);
+        
+        if (timer.elapsedTime > 0) {
+            alert(`活动"${activityName}"已完成！\n总用时: ${timeMessage}\n记录已保存到统计中。`);
+        } else {
+            alert(`活动"${activityName}"已重置。`);
         }
     }
 

@@ -651,28 +651,32 @@ input[type="date"]:focus {
 }
 
 .timer-card {
-    background: #1a1a1a;
+    background: #1A1A1A;
+    border: 1px solid #333;
     border-radius: 12px;
     padding: 20px;
-    border: 1px solid #333;
-    transition: all 0.3s;
+    transition: all 0.3s ease;
     cursor: pointer;
-    position: relative;
 }
 
 .timer-card:hover {
-    border-color: #555;
+    border-color: #4CAF50;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
     transform: translateY(-2px);
 }
 
 .timer-card.running {
     border-color: #4CAF50;
-    box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
 }
 
 .timer-card.paused {
-    border-color: #FF9800;
-    box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+    border-color: #ff9800;
+    box-shadow: 0 0 15px rgba(255, 152, 0, 0.3);
+}
+
+.timer-card.stopped {
+    border-color: #666;
 }
 
 .timer-header {
@@ -774,13 +778,139 @@ input[type="date"]:focus {
     grid-column: 1 / -1;
 }
 
-/* 移动端适配 */
-@media (max-width: 768px) {
-    .activity-timers {
-        grid-template-columns: 1fr;
+/* 通知动画 */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* 通知基础样式 */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #2196F3;
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000;
+    max-width: 300px;
+    word-wrap: break-word;
+    animation: slideInRight 0.3s ease-out;
+}
+
+.notification-success {
+    background: #4CAF50;
+}
+
+.notification-warning {
+    background: #ff9800;
+}
+
+.notification-error {
+    background: #f44336;
+}
+
+.notification-info {
+    background: #2196F3;
+}
+
+/* 计时器卡片按钮区域布局优化 */
+.timer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #333;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+/* 确保运行中的计时器按钮更突出 */
+.timer-card.running .timer-actions .timer-btn.pause {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 8px rgba(255, 152, 0, 0.6);
+    }
+    100% {
+        box-shadow: 0 2px 4px rgba(255, 152, 0, 0.3);
+    }
+}
+
+/* 改进按钮组的响应式布局 */
+@media (max-width: 480px) {
+    .timer-actions {
+        gap: 4px;
     }
     
-    .timer-time {
-        font-size: 1.2rem;
+    .timer-btn {
+        flex: 1;
+        min-width: 45px;
+        height: 32px;
+        padding: 6px;
+    }
+    
+    .timer-btn .btn-text {
+        display: none;
+    }
+    
+    .timer-btn .btn-icon {
+        font-size: 18px;
+    }
+}
+
+/* 高对比度和无障碍支持 */
+@media (prefers-contrast: high) {
+    .timer-btn {
+        border: 2px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .timer-btn:focus {
+        outline: 3px solid #fff;
+        outline-offset: 2px;
+    }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+    .timer-btn,
+    .notification {
+        transition: none;
+        animation: none;
+    }
+    
+    .timer-btn:hover {
+        transform: none;
+    }
+    
+    .timer-btn:active {
+        transform: scale(0.95);
     }
 }

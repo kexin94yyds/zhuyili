@@ -106,59 +106,62 @@
         /* 按钮区域 */
         .button-area {
             display: flex;
-            gap: 30px;
+            gap: 20px;
             margin-bottom: 40px;
+            justify-content: center;
         }
 
         .control-btn {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
+            padding: 15px 30px;
             border: none;
-            font-size: 18px;
-            font-weight: bold;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.3s;
             display: flex;
             align-items: center;
             justify-content: center;
+            min-width: 120px;
+            height: 50px;
         }
 
-        .reset-btn {
-            background-color: #666;
-            color: #FFFFFF;
-        }
-
-        .reset-btn:hover {
-            background-color: #777;
-        }
-
-        .start-btn {
+        /* 主界面风格的按钮样式 */
+        .control-btn.primary {
             background-color: #4CAF50;
             color: #FFFFFF;
         }
 
-        .start-btn:hover {
+        .control-btn.primary:hover {
             background-color: #45a049;
         }
 
-        .stop-btn {
+        .control-btn.secondary {
+            background-color: #666;
+            color: #FFFFFF;
+        }
+
+        .control-btn.secondary:hover {
+            background-color: #777;
+        }
+
+        .control-btn.danger {
             background-color: #f44336;
             color: #FFFFFF;
         }
 
-        .stop-btn:hover {
+        .control-btn.danger:hover {
             background-color: #da190b;
         }
 
-        .lap-btn {
-            background-color: #2196F3;
-            color: #FFFFFF;
+        /* 按钮初始隐藏样式 */
+        .btn-hidden {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
         }
 
-        .lap-btn:hover {
-            background-color: #0b7dda;
-        }
+
 
         /* Lap 列表 */
         .lap-container {
@@ -233,6 +236,8 @@
             background-color: #666;
         }
 
+
+
         /* 响应式设计 */
         @media (max-width: 768px) {
             .time-display {
@@ -240,13 +245,49 @@
             }
             
             .control-btn {
-                width: 100px;
-                height: 100px;
-                font-size: 16px;
+                min-width: 100px;
+                height: 45px;
+                font-size: 14px;
+                padding: 10px 20px;
             }
             
             .button-area {
-                gap: 20px;
+                gap: 15px;
+            }
+
+            .lap-btn {
+                min-width: 100px;
+                height: 45px;
+                font-size: 14px;
+                padding: 10px 20px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .button-area {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
+            }
+
+            .control-btn {
+                min-width: 90px;
+                font-size: 14px;
+                padding: 12px 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .button-area {
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .control-btn {
+                width: 180px;
+                height: 48px;
+                font-size: 16px;
             }
         }
     </style>
@@ -272,8 +313,10 @@
         
         <!-- 按钮区域 -->
         <div class="button-area">
-            <button class="control-btn reset-btn" id="left-btn">重置</button>
-            <button class="control-btn start-btn" id="right-btn">开始</button>
+            <button class="control-btn btn-hidden" id="btn-1"></button>
+            <button class="control-btn btn-hidden" id="btn-2"></button>
+            <button class="control-btn btn-hidden" id="btn-3"></button>
+            <button class="control-btn btn-hidden" id="btn-4"></button>
         </div>
     </div>
 
@@ -290,166 +333,109 @@
     </div>
 
     <script>
-        // 获取URL参数中的活动名称
+        // 从URL获取活动名称
         function getActivityName() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get('activity') || '未知活动';
+            const params = new URLSearchParams(window.location.search);
+            return params.get('activity') || '默认活动';
         }
 
-        // 多活动计时器管理器
-        class MultiStopwatchManager {
-            constructor() {
-                this.timers = new Map(); // 存储所有活动的计时器
-                this.loadData();
-            }
+        // 引入主界面的管理器脚本
+        const script = document.createElement('script');
+        script.src = 'multi-stopwatch.js';
+        document.head.appendChild(script);
 
-            // 创建或获取活动计时器
-            getTimer(activityName) {
-                if (!this.timers.has(activityName)) {
-                    this.timers.set(activityName, {
-                        name: activityName,
-                        startTime: null,
-                        elapsedTime: 0,
-                        isRunning: false,
-                        laps: [],
-                        intervalId: null
-                    });
-                }
-                return this.timers.get(activityName);
-            }
-
-            // 开始计时
-            start(activityName) {
-                const timer = this.getTimer(activityName);
-                if (!timer.isRunning) {
-                    timer.startTime = Date.now() - timer.elapsedTime;
-                    timer.isRunning = true;
-                    this.saveData();
-                }
-            }
-
-            // 停止计时
-            stop(activityName) {
-                const timer = this.getTimer(activityName);
-                if (timer.isRunning) {
-                    timer.elapsedTime = Date.now() - timer.startTime;
-                    timer.isRunning = false;
-                    this.saveData();
-                }
-            }
-
-            // 重置计时器
-            reset(activityName) {
-                const timer = this.getTimer(activityName);
-                timer.startTime = null;
-                timer.elapsedTime = 0;
-                timer.isRunning = false;
-                timer.laps = [];
-                this.saveData();
-            }
-
-            // 添加Lap
-            addLap(activityName) {
-                const timer = this.getTimer(activityName);
-                if (timer.isRunning) {
-                    const currentTime = Date.now() - timer.startTime;
-                    const lastLapTime = timer.laps.length > 0 ? timer.laps[timer.laps.length - 1].total : 0;
-                    
-                    timer.laps.push({
-                        number: timer.laps.length + 1,
-                        split: currentTime - lastLapTime,
-                        total: currentTime
-                    });
-                    this.saveData();
-                }
-            }
-
-            // 获取当前时间
-            getCurrentTime(activityName) {
-                const timer = this.getTimer(activityName);
-                if (timer.isRunning) {
-                    return Date.now() - timer.startTime;
-                } else {
-                    return timer.elapsedTime;
-                }
-            }
-
-            // 获取所有活动列表
-            getAllActivities() {
-                return Array.from(this.timers.keys());
-            }
-
-            // 保存数据
-            saveData() {
-                const data = {};
-                this.timers.forEach((timer, name) => {
-                    data[name] = {
-                        ...timer,
-                        intervalId: null // 不保存intervalId
-                    };
-                });
-                localStorage.setItem('multiStopwatchData', JSON.stringify(data));
-            }
-
-            // 加载数据
-            loadData() {
-                const data = localStorage.getItem('multiStopwatchData');
-                if (data) {
-                    try {
-                        const parsed = JSON.parse(data);
-                        Object.entries(parsed).forEach(([name, timer]) => {
-                            this.timers.set(name, {
-                                ...timer,
-                                intervalId: null
-                            });
-                        });
-                    } catch (error) {
-                        console.error('加载数据失败:', error);
-                    }
-                }
-            }
-        }
-
-        // 全局变量
-        let manager = new MultiStopwatchManager();
+        // 使用全局的MultiStopwatchManager，确保数据一致性
+        let manager = null;
         let currentActivity = getActivityName();
         let updateInterval = null;
+        let isInitialized = false;
 
         // DOM 元素
         const activityTitle = document.getElementById('activity-title');
         const timeDisplay = document.getElementById('time-display');
-        const leftBtn = document.getElementById('left-btn');
-        const rightBtn = document.getElementById('right-btn');
+        const buttonArea = document.querySelector('.button-area');
         const lapList = document.getElementById('lap-list');
         const statusIndicator = document.getElementById('status-indicator');
         const activitySwitcher = document.getElementById('activity-switcher');
 
-        // 格式化时间显示
-        function formatTime(milliseconds) {
-            const totalSeconds = Math.floor(milliseconds / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            const ms = Math.floor((milliseconds % 1000) / 10);
-
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+        // 初始化管理器（使用主界面的管理器类）
+        function initManager() {
+            return new Promise((resolve) => {
+                // 等待主界面脚本加载完成
+                if (typeof MultiStopwatchManager !== 'undefined') {
+                    manager = new MultiStopwatchManager();
+                    console.log('✅ 使用主界面的MultiStopwatchManager实例');
+                    
+                    // 确保数据完全加载
+                    setTimeout(() => {
+                        if (manager.getTimer && manager.getTimer(currentActivity)) {
+                            console.log(`✅ 计时器"${currentActivity}"数据已就绪`);
+                            resolve(true);
+                        } else {
+                            console.log(`⚠️ 计时器"${currentActivity}"数据未就绪，创建新的计时器`);
+                            // 如果计时器不存在，创建一个新的
+                            manager.getTimer(currentActivity); // 这会自动创建计时器
+                            resolve(true);
+                        }
+                    }, 50);
+                } else {
+                    // 如果主界面脚本还未加载，延迟初始化
+                    setTimeout(() => {
+                        initManager().then(resolve);
+                    }, 100);
+                }
+            });
         }
 
-        // 更新显示
-        function updateDisplay() {
+        // 仅更新时间显示（不触及按钮）
+        function updateTimeDisplay() {
+            if (!manager) return;
+            
             const timer = manager.getTimer(currentActivity);
+            if (!timer) return;
+            
+            // 获取当前时间 - 使用主界面相同的方法
             const currentTime = manager.getCurrentTime(currentActivity);
             
-            timeDisplay.textContent = formatTime(currentTime);
+            // 使用主界面的格式化函数，确保显示一致
+            const formattedTime = manager.formatTime ? manager.formatTime(currentTime) : formatTimeLocal(currentTime);
+            
+            // 更新时间显示
+            if (timeDisplay) {
+                timeDisplay.textContent = formattedTime;
+            }
             
             // 更新状态指示器
-            statusIndicator.className = 'status-indicator';
-            if (timer.isRunning) {
-                statusIndicator.classList.add('status-running');
-            } else if (timer.elapsedTime > 0) {
-                statusIndicator.classList.add('status-paused');
-            } else {
-                statusIndicator.classList.add('status-stopped');
+            if (statusIndicator) {
+                statusIndicator.className = 'status-indicator';
+                if (timer.isRunning) {
+                    statusIndicator.classList.add('status-running');
+                } else if (timer.elapsedTime > 0) {
+                    statusIndicator.classList.add('status-paused');
+                } else {
+                    statusIndicator.classList.add('status-stopped');
+                }
+            }
+        }
+        
+        // 更新显示（包括按钮）
+        function updateDisplay() {
+            if (!manager) return;
+            
+            const timer = manager.getTimer(currentActivity);
+            if (!timer) return;
+            
+            // 更新时间显示
+            updateTimeDisplay();
+            
+            // 精简调试信息（仅在开始/停止时输出）
+            if (timer.isRunning && !updateDisplay.wasRunning) {
+                console.log(`⏰ 开始计时: ${currentActivity}`);
+                updateDisplay.wasRunning = true;
+            } else if (!timer.isRunning && updateDisplay.wasRunning) {
+                const formattedTime = manager.formatTime ? manager.formatTime(manager.getCurrentTime(currentActivity)) : formatTimeLocal(manager.getCurrentTime(currentActivity));
+                console.log(`⏰ 停止计时: ${currentActivity} - 总时间: ${formattedTime}`);
+                updateDisplay.wasRunning = false;
             }
             
             // 更新按钮状态
@@ -459,51 +445,146 @@
             updateLapList();
         }
 
-        // 更新按钮状态
-        function updateButtons() {
-            const timer = manager.getTimer(currentActivity);
-            
-            if (timer.isRunning) {
-                // 计时进行中：下一段 | 停止
-                leftBtn.textContent = '下一段';
-                leftBtn.className = 'control-btn lap-btn';
-                rightBtn.textContent = '停止';
-                rightBtn.className = 'control-btn stop-btn';
-            } else if (timer.elapsedTime > 0) {
-                // 暂停状态：重置 | 开始（继续）
-                leftBtn.textContent = '重置';
-                leftBtn.className = 'control-btn reset-btn';
-                rightBtn.textContent = '继续';
-                rightBtn.className = 'control-btn start-btn';
+        // 本地时间格式化函数（备用）- 与主界面完全一致
+        function formatTimeLocal(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            const ms = Math.floor((milliseconds % 1000) / 10);
+
+            if (hours > 0) {
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
             } else {
-                // 初始状态：重置 | 开始
-                leftBtn.textContent = '重置';
-                leftBtn.className = 'control-btn reset-btn';
-                rightBtn.textContent = '开始';
-                rightBtn.className = 'control-btn start-btn';
+                return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
             }
+        }
+
+        // 使用主界面相同的按钮生成逻辑
+        function getActionButtons(timer) {
+            if (timer.isRunning) {
+                return `
+                    <button class="control-btn secondary" data-action="stop">暂停</button>
+                    <button class="control-btn primary" data-action="lap">分段</button>
+                    <button class="control-btn primary" data-action="complete">完成</button>
+                `;
+            } else if (timer.elapsedTime > 0) {
+                return `
+                    <button class="control-btn primary" data-action="start">继续</button>
+                    <button class="control-btn primary" data-action="complete">完成</button>
+                    <button class="control-btn secondary" data-action="reset">重置</button>
+                    <button class="control-btn danger" data-action="delete">删除</button>
+                `;
+            } else {
+                return `
+                    <button class="control-btn primary" data-action="start">开始</button>
+                    <button class="control-btn danger" data-action="delete">删除</button>
+                `;
+            }
+        }
+
+        // 添加按钮事件监听器 - 与主界面逻辑一致
+        function addButtonListeners() {
+            const buttons = buttonArea.querySelectorAll('.control-btn');
+            console.log(`🔗 绑定事件到 ${buttons.length} 个按钮`);
+            
+            buttons.forEach((button, index) => {
+                const action = button.dataset.action;
+                console.log(`按钮 ${index + 1}: ${button.textContent} -> ${action}`);
+                
+                // 移除旧的事件监听器
+                button.removeEventListener('click', handleButtonClick);
+                
+                // 添加新的事件监听器
+                button.addEventListener('click', handleButtonClick);
+            });
+        }
+
+        // 统一的按钮点击处理函数
+        function handleButtonClick(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const button = e.target;
+            const action = button.dataset.action;
+            const buttonText = button.textContent;
+            
+            console.log(`🔘 按钮点击 - 文本: "${buttonText}", 操作: "${action}", 活动: "${currentActivity}"`);
+            
+            if (!action) {
+                console.error('❌ 按钮缺少action属性');
+                return;
+            }
+            
+            // 添加点击视觉反馈
+            button.style.transform = 'scale(0.98)';
+            setTimeout(() => {
+                button.style.transform = '';
+            }, 100);
+            
+            handleButtonAction(action);
+        }
+
+        // 更新按钮状态 - 与主界面逻辑完全一致
+        function updateButtons() {
+            if (!manager) return;
+            
+            const timer = manager.getTimer(currentActivity);
+            if (!timer) return;
+            
+            // 确定当前状态
+            let newState;
+            if (timer.isRunning) {
+                newState = 'running';
+            } else if (timer.elapsedTime > 0) {
+                newState = 'paused';
+            } else {
+                newState = 'initial';
+            }
+            
+            // 避免重复更新相同状态
+            if (updateButtons.lastState === newState) {
+                return;
+            }
+            updateButtons.lastState = newState;
+            
+            console.log(`🔄 更新按钮状态: ${updateButtons.lastState} → ${newState}`);
+            
+            // 使用主界面相同的按钮生成逻辑
+            buttonArea.innerHTML = getActionButtons(timer);
+            
+            // 绑定按钮事件
+            addButtonListeners();
+            
+            console.log('✅ 按钮状态更新完成');
         }
 
         // 更新Lap列表
         function updateLapList() {
+            if (!manager) return;
+            
             const timer = manager.getTimer(currentActivity);
             lapList.innerHTML = '';
             
             // 倒序显示Lap（最新的在前面）
-            timer.laps.slice().reverse().forEach(lap => {
-                const lapItem = document.createElement('div');
-                lapItem.className = 'lap-item';
-                lapItem.innerHTML = `
-                    <span class="lap-number">Lap ${lap.number}</span>
-                    <span class="lap-split">${formatTime(lap.split)}</span>
-                    <span class="lap-total">${formatTime(lap.total)}</span>
-                `;
-                lapList.appendChild(lapItem);
-            });
+            if (timer.laps && timer.laps.length > 0) {
+                timer.laps.slice().reverse().forEach(lap => {
+                    const lapItem = document.createElement('div');
+                    lapItem.className = 'lap-item';
+                    lapItem.innerHTML = `
+                        <span class="lap-number">Lap ${lap.number}</span>
+                        <span class="lap-split">${manager.formatTime ? manager.formatTime(lap.split) : formatTimeLocal(lap.split)}</span>
+                        <span class="lap-total">${manager.formatTime ? manager.formatTime(lap.total) : formatTimeLocal(lap.total)}</span>
+                    `;
+                    lapList.appendChild(lapItem);
+                });
+            }
         }
 
         // 更新活动切换器
         function updateActivitySwitcher() {
+            if (!manager) return;
+            
             const activities = manager.getAllActivities();
             activitySwitcher.innerHTML = '<option value="">切换活动</option>';
             
@@ -517,40 +598,163 @@
             });
         }
 
-        // 左按钮点击事件
-        leftBtn.addEventListener('click', () => {
-            const timer = manager.getTimer(currentActivity);
+        // 使用主界面相同的按钮处理逻辑
+        function handleButtonAction(action) {
+            console.log(`🚀 开始执行操作: "${action}"`);
             
-            if (timer.isRunning) {
-                // 添加Lap
-                manager.addLap(currentActivity);
-            } else {
-                // 重置
-                manager.reset(currentActivity);
+            if (!manager) {
+                console.error('❌ Manager未初始化');
+                showNotification('管理器未初始化，请刷新页面');
+                return;
             }
-            updateDisplay();
-        });
+            
+            const timer = manager.getTimer(currentActivity);
+            if (!timer) {
+                console.error('❌ 计时器未找到');
+                showNotification('计时器未找到，请刷新页面');
+                return;
+            }
+            
+            console.log(`📊 操作前状态 - 运行: ${timer.isRunning}, 时间: ${timer.elapsedTime}ms, Laps: ${timer.laps?.length || 0}`);
+            
+            const oldRunningState = timer.isRunning;
+            const oldElapsedTime = timer.elapsedTime;
+            
+            try {
+                switch (action) {
+                    case 'start':
+                        console.log('▶️ 执行开始操作');
+                        manager.start(currentActivity);
+                        showNotification(`"${currentActivity}" 已开始计时`);
+                        break;
+                        
+                    case 'stop':
+                        console.log('⏸️ 执行暂停操作');
+                        manager.stop(currentActivity);
+                        showNotification(`"${currentActivity}" 已暂停`);
+                        break;
+                        
+                    case 'lap':
+                        console.log('🏁 执行分段操作');
+                        manager.addLap(currentActivity);
+                        const lapNumber = timer.laps?.length || 0;
+                        showNotification(`已添加第 ${lapNumber} 个分段`);
+                        break;
+                        
+                    case 'complete':
+                        if (confirm(`确定要完成"${currentActivity}"活动吗？这将保存活动记录并重置计时器。`)) {
+                            console.log('✅ 执行完成操作');
+                            manager.completeActivityAndReset(currentActivity);
+                            showNotification(`"${currentActivity}" 活动已完成并保存`);
+                        } else {
+                            console.log('❌ 用户取消完成操作');
+                            return;
+                        }
+                        break;
+                        
+                    case 'reset':
+                        if (confirm(`确定要重置"${currentActivity}"的计时器吗？这将清除当前计时数据。`)) {
+                            console.log('🔄 执行重置操作');
+                            manager.reset(currentActivity);
+                            showNotification(`"${currentActivity}" 计时器已重置`);
+                        } else {
+                            console.log('❌ 用户取消重置操作');
+                            return;
+                        }
+                        break;
+                        
+                    case 'delete':
+                        if (confirm(`确定要删除"${currentActivity}"计时器吗？删除后将无法恢复。`)) {
+                            console.log('🗑️ 执行删除操作');
+                            manager.delete(currentActivity);
+                            showNotification(`"${currentActivity}" 计时器已删除`);
+                            // 返回主页
+                            setTimeout(() => {
+                                window.location.href = 'index.html';
+                            }, 1000);
+                            return;
+                        } else {
+                            console.log('❌ 用户取消删除操作');
+                            return;
+                        }
+                        break;
+                        
+                    default:
+                        console.error(`❌ 未知操作: ${action}`);
+                        showNotification(`未知操作: ${action}`);
+                        return;
+                }
+                
+                // 验证操作结果
+                const newTimer = manager.getTimer(currentActivity);
+                if (newTimer) {
+                    console.log(`📊 操作后状态 - 运行: ${newTimer.isRunning}, 时间: ${newTimer.elapsedTime}ms, Laps: ${newTimer.laps?.length || 0}`);
+                }
+                
+                // 立即更新显示
+                updateTimeDisplay();
+                updateLapList();
+                
+                // 检查运行状态变化
+                const newRunningState = newTimer.isRunning;
+                if (oldRunningState !== newRunningState) {
+                    console.log(`🔄 运行状态改变: ${oldRunningState} → ${newRunningState}，重启更新循环`);
+                    startUpdateLoop();
+                }
+                
+                // 更新按钮状态
+                setTimeout(() => {
+                    updateButtons();
+                }, 50);
+                
+                console.log(`✅ 操作 "${action}" 执行完成`);
+                
+            } catch (error) {
+                console.error(`❌ 执行操作 "${action}" 时出错:`, error);
+                showNotification(`执行操作失败: ${error.message}`);
+            }
+        }
 
-        // 右按钮点击事件
-        rightBtn.addEventListener('click', () => {
-            const timer = manager.getTimer(currentActivity);
+        // 显示通知
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
             
-            if (timer.isRunning) {
-                // 停止
-                manager.stop(currentActivity);
-            } else {
-                // 开始
-                manager.start(currentActivity);
-            }
-            updateDisplay();
-        });
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #4CAF50;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                font-size: 14px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                animation: slideInRight 0.3s ease-out;
+            `;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOutRight 0.3s ease-in';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 2000);
+        }
+
+
 
         // 活动切换
-        activitySwitcher.addEventListener('change', (e) => {
+        function handleActivitySwitch(e) {
             if (e.target.value) {
                 window.location.href = `stopwatch.html?activity=${encodeURIComponent(e.target.value)}`;
             }
-        });
+        }
 
         // 返回主页
         function goBack() {
@@ -559,18 +763,111 @@
 
         // 开始更新循环
         function startUpdateLoop() {
+            // 清除现有的更新循环
             if (updateInterval) {
                 clearInterval(updateInterval);
+                updateInterval = null;
             }
-            updateInterval = setInterval(updateDisplay, 10); // 每10ms更新一次，实现毫秒级精度
+            
+            if (!manager) return;
+            
+            // 获取当前计时器状态
+            const timer = manager.getTimer(currentActivity);
+            if (!timer) return;
+            
+            // 统一使用100ms更新间隔，与主界面保持一致
+            const interval = timer.isRunning ? 100 : 1000;
+            
+            console.log(`🔄 启动更新循环: 活动="${currentActivity}", 运行状态=${timer.isRunning}, 更新间隔=${interval}ms`);
+            
+            // 立即执行一次时间更新（避免触及按钮）
+            updateTimeDisplay();
+            updateLapList();
+            
+            // 设置新的更新循环 - 仅更新时间显示，避免频繁更新按钮
+            updateInterval = setInterval(() => {
+                try {
+                    updateTimeDisplay();
+                    updateLapList();
+                } catch (error) {
+                    console.error('❌ 更新显示时出错:', error);
+                }
+            }, interval);
+            
+            // 设置状态监听器，只在状态真正改变时重启循环
+            startUpdateLoop.lastRunningState = timer.isRunning;
+        }
+
+        // 强制隐藏按钮函数
+        function forceHideButtons() {
+            // 清空按钮区域
+            buttonArea.innerHTML = '';
+            console.log('🔒 强制隐藏所有按钮');
         }
 
         // 初始化
         function init() {
+            console.log('🚀 开始初始化stopwatch页面...');
+            
+            // 防止重复初始化
+            if (isInitialized) {
+                console.log('⚠️ 页面已经初始化过，跳过');
+                return;
+            }
+            
+            // 验证DOM元素
+            if (!timeDisplay) {
+                console.error('timeDisplay元素未找到！');
+                return;
+            }
+            if (!buttonArea) {
+                console.error('按钮区域未找到！');
+                return;
+            }
+            
+            // 立即强制隐藏所有按钮 - 使用最强制的方式
+            forceHideButtons();
+            
+            // 设置活动标题
             activityTitle.textContent = currentActivity;
-            updateDisplay();
-            updateActivitySwitcher();
-            startUpdateLoop();
+            
+            // 初始化管理器
+            initManager().then(() => {
+                // 验证管理器
+                const timer = manager.getTimer(currentActivity);
+                if (!timer) {
+                    console.error(`计时器"${currentActivity}"未找到！`);
+                    return;
+                }
+                
+                console.log(`✅ 计时器状态确认: 运行=${timer.isRunning}, 时间=${timer.elapsedTime}ms`);
+                
+                // 绑定事件监听器
+                activitySwitcher.addEventListener('change', handleActivitySwitch);
+                
+                // 初始化其他显示内容（但不包括按钮）
+                updateTimeDisplay();
+                updateLapList();
+                updateActivitySwitcher();
+                
+                console.log('⏳ 等待200ms后显示按钮...');
+                
+                // 延迟足够长的时间，确保所有初始化完成
+                setTimeout(() => {
+                    // 现在安全地更新按钮
+                    updateButtons();
+                    console.log('🎯 按钮状态设置完成，启动更新循环');
+                    
+                    // 开始更新循环
+                    startUpdateLoop();
+                    
+                    // 标记初始化完成
+                    isInitialized = true;
+                    console.log('📱 Stopwatch页面初始化完成');
+                }, 200);
+            }).catch((error) => {
+                console.error('❌ 初始化失败:', error);
+            });
         }
 
         // 页面加载完成后初始化
@@ -582,6 +879,18 @@
                 clearInterval(updateInterval);
             }
         });
+
+        // 监听存储变化，确保与主界面同步
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'multiStopwatchData' && manager) {
+                console.log('检测到存储数据变化，重新加载数据...');
+                manager.loadData();
+                updateDisplay();
+                updateActivitySwitcher();
+            }
+        });
+
+
     </script>
 </body>
 </html> 

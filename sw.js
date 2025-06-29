@@ -1,5 +1,5 @@
 // Service Worker for Attention—Span—Tracker PWA
-const CACHE_NAME = 'time-tracker-v2';
+const CACHE_NAME = 'time-tracker-v3';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -44,39 +44,38 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// 拦截请求
+// 拦截请求 - 使用网络优先策略（开发时更方便）
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request)
+    fetch(event.request)
       .then((response) => {
-        // 如果在缓存中找到，返回缓存的版本
-        if (response) {
+        // 检查响应是否有效
+        if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
-        
-        // 否则从网络获取
-        return fetch(event.request).then((response) => {
-          // 检查响应是否有效
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
 
-          // 克隆响应
-          const responseToCache = response.clone();
+        // 克隆响应用于缓存
+        const responseToCache = response.clone();
 
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+        caches.open(CACHE_NAME)
+          .then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
 
-          return response;
-        });
+        return response;
       })
       .catch(() => {
-        // 如果网络和缓存都失败，返回离线页面
-        if (event.request.destination === 'document') {
-          return caches.match('/index.html');
-        }
+        // 网络失败时，尝试从缓存获取
+        return caches.match(event.request)
+          .then((cachedResponse) => {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            // 如果缓存也没有，返回离线页面
+            if (event.request.destination === 'document') {
+              return caches.match('/index.html');
+            }
+          });
       })
   );
 });
