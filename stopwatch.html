@@ -341,7 +341,7 @@
 
         // 引入主界面的管理器脚本
         const script = document.createElement('script');
-        script.src = 'multi-stopwatch.js';
+        script.src = 'multi-stopwatch-fixed.js';
         document.head.appendChild(script);
 
         // 使用全局的MultiStopwatchManager，确保数据一致性
@@ -631,6 +631,17 @@
                     case 'stop':
                         console.log('⏸️ 执行暂停操作');
                         manager.stop(currentActivity);
+                        
+                        // 立即停止详情页面的更新循环
+                        if (updateInterval) {
+                            clearInterval(updateInterval);
+                            updateInterval = null;
+                            console.log('⏹️ 详情页面更新循环已停止');
+                        }
+                        
+                        // 立即更新显示到正确的暂停时间
+                        updateTimeDisplay();
+                        
                         showNotification(`"${currentActivity}" 已暂停`);
                         break;
                         
@@ -691,6 +702,9 @@
                     console.log(`📊 操作后状态 - 运行: ${newTimer.isRunning}, 时间: ${newTimer.elapsedTime}ms, Laps: ${newTimer.laps?.length || 0}`);
                 }
                 
+                // 立即强制保存数据
+                manager.saveData();
+                
                 // 立即更新显示
                 updateTimeDisplay();
                 updateLapList();
@@ -701,6 +715,13 @@
                     console.log(`🔄 运行状态改变: ${oldRunningState} → ${newRunningState}，重启更新循环`);
                     startUpdateLoop();
                 }
+                
+                // 强制触发storage事件，通知其他页面更新
+                setTimeout(() => {
+                    // 触发storage事件让主界面知道数据已更新
+                    window.localStorage.setItem('multiStopwatchData_notify', Date.now().toString());
+                    window.localStorage.removeItem('multiStopwatchData_notify');
+                }, 10);
                 
                 // 更新按钮状态
                 setTimeout(() => {
