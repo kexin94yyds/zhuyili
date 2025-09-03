@@ -665,6 +665,8 @@ class MultiStopwatchManager {
 
     // 保存数据
     saveData() {
+        console.log('🔍 [MultiStopwatch] saveData函数被调用');
+        
         const data = {};
         this.timers.forEach((timer, name) => {
             data[name] = {
@@ -675,6 +677,9 @@ class MultiStopwatchManager {
         
         // 同时保存兼容旧统计系统的数据格式
         this.saveCompatibleData();
+        
+        // 尝试保存到后端
+        this.saveToBackend();
     }
 
     // *** 关键修复：清除当前活动记录 ***
@@ -856,6 +861,38 @@ class MultiStopwatchManager {
             clearInterval(intervalId);
         });
         this.updateIntervals.clear();
+    }
+
+    // 保存到后端API
+    saveToBackend() {
+        console.log('🌐 [MultiStopwatch] 正在保存到后端...');
+        
+        // 获取兼容格式的数据
+        const compatibleData = {
+            activities: JSON.parse(localStorage.getItem('timeTrackerActivities') || '[]'),
+            currentActivity: JSON.parse(localStorage.getItem('timeTrackerData') || '{}').currentActivity
+        };
+        
+        console.log('📊 [MultiStopwatch] 要保存的数据:', compatibleData);
+        
+        // 调用后端API
+        fetch('/api/activities', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(compatibleData)
+        })
+        .then(response => {
+            if (response.ok) {
+                console.log('✅ [MultiStopwatch] 数据已保存到后端');
+            } else {
+                console.error('❌ [MultiStopwatch] 保存到后端失败');
+            }
+        })
+        .catch(error => {
+            console.error('❌ [MultiStopwatch] 后端保存失败:', error);
+        });
     }
 }
 

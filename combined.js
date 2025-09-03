@@ -357,14 +357,40 @@ function getActivityNames() {
     return Array.from(namesSet);
 }
 
-// 保存数据到本地存储
+// 保存数据到本地存储和后端
 function saveData() {
+    console.log('🔍 saveData函数被调用');
+    
     const data = {
         activities: activities,
         currentActivity: currentActivity
     };
     
+    console.log('📊 要保存的数据:', data);
+    
+    // 保存到localStorage（确保基本功能）
     localStorage.setItem('timeTrackerData', JSON.stringify(data));
+    console.log('✅ 数据已保存到localStorage');
+    
+    // 尝试保存到后端
+    console.log('🌐 正在保存到后端...');
+    fetch('/api/activities', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (response.ok) {
+            console.log('✅ 数据已保存到后端');
+        } else {
+            console.error('❌ 保存到后端失败');
+        }
+    })
+    .catch(error => {
+        console.error('❌ 后端保存失败，但localStorage已保存:', error);
+    });
 }
 
 // 从本地存储加载数据
