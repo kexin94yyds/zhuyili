@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>计时器修复测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        .log {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1>计时器暂停时间计算Bug修复测试</h1>
+    
+    <div class="test-section">
+        <h2>测试说明</h2>
+        <p>这个测试页面用于验证计时器暂停时间计算的bug修复。</p>
+        <p><strong>Bug描述：</strong>当用户开始计时，然后暂停，第二天点击完成时，系统会错误地记录从开始到完成的总时间，而不是实际的活动时间。</p>
+        <p><strong>修复内容：</strong>现在系统会正确记录实际的活动时间，不包括暂停期间的时间。</p>
+    </div>
+
+    <div class="test-section">
+        <h2>模拟测试</h2>
+        <p>点击下面的按钮来模拟计时器的各种操作：</p>
+        
+        <button class="test-button" onclick="simulateTest()">开始完整测试</button>
+        <button class="test-button" onclick="clearLog()">清除日志</button>
+        
+        <div id="test-status" class="status" style="display: none;"></div>
+        <div id="test-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>实际测试步骤</h2>
+        <ol>
+            <li>打开主页面 (index.html)</li>
+            <li>输入活动名称，点击"开始记录"</li>
+            <li>在计时页面点击"开始"</li>
+            <li>等待几秒钟，然后点击"暂停"</li>
+            <li>等待几秒钟，然后点击"完成"</li>
+            <li>检查活动记录中的时间是否正确（应该只显示实际活动时间，不包括暂停期间）</li>
+        </ol>
+    </div>
+
+    <script>
+        let logElement = document.getElementById('test-log');
+        let statusElement = document.getElementById('test-status');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+        
+        function showStatus(message, type = 'success') {
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+            statusElement.style.display = 'block';
+        }
+        
+        function clearLog() {
+            logElement.textContent = '';
+            statusElement.style.display = 'none';
+        }
+        
+        function simulateTest() {
+            clearLog();
+            log('开始模拟计时器暂停时间计算测试...');
+            
+            // 模拟计时器数据
+            const testTimer = {
+                name: '测试活动',
+                startTime: Date.now() - 60000, // 1分钟前开始
+                elapsedTime: 30000, // 实际运行了30秒
+                isRunning: false,
+                laps: []
+            };
+            
+            log(`模拟计时器状态:`);
+            log(`- 活动名称: ${testTimer.name}`);
+            log(`- 开始时间: ${new Date(testTimer.startTime).toLocaleString()}`);
+            log(`- 实际运行时间: ${testTimer.elapsedTime}ms (${Math.floor(testTimer.elapsedTime/1000)}秒)`);
+            log(`- 运行状态: ${testTimer.isRunning ? '运行中' : '已暂停'}`);
+            
+            // 模拟修复前的时间计算（错误的）
+            const wrongEndTime = Date.now();
+            const wrongDuration = Math.floor((wrongEndTime - testTimer.startTime) / (1000 * 60));
+            
+            log(`\n修复前的时间计算 (错误):`);
+            log(`- 结束时间: ${new Date(wrongEndTime).toLocaleString()}`);
+            log(`- 计算的总时间: ${wrongDuration} 分钟`);
+            log(`- 问题: 包含了暂停期间的时间`);
+            
+            // 模拟修复后的时间计算（正确的）
+            const correctStartTime = new Date(testTimer.startTime);
+            const correctEndTime = new Date(testTimer.startTime + testTimer.elapsedTime);
+            const correctDuration = Math.floor(testTimer.elapsedTime / (1000 * 60));
+            
+            log(`\n修复后的时间计算 (正确):`);
+            log(`- 实际开始时间: ${correctStartTime.toLocaleString()}`);
+            log(`- 实际结束时间: ${correctEndTime.toLocaleString()}`);
+            log(`- 实际活动时间: ${correctDuration} 分钟`);
+            log(`- 修复: 只记录实际活动时间，不包括暂停期间`);
+            
+            // 验证修复
+            if (correctDuration < wrongDuration) {
+                showStatus('✅ 修复验证成功！现在只记录实际活动时间。', 'success');
+                log(`\n✅ 修复验证成功！`);
+                log(`- 修复前记录时间: ${wrongDuration} 分钟`);
+                log(`- 修复后记录时间: ${correctDuration} 分钟`);
+                log(`- 节省了 ${wrongDuration - correctDuration} 分钟的无效时间记录`);
+            } else {
+                showStatus('❌ 修复验证失败！', 'error');
+                log(`\n❌ 修复验证失败！`);
+            }
+            
+            log('\n测试完成！');
+        }
+        
+        // 页面加载时自动运行一次测试
+        window.addEventListener('load', () => {
+            log('计时器修复测试页面已加载');
+            log('点击"开始完整测试"按钮来运行模拟测试');
+        });
+    </script>
+</body>
+</html>

@@ -827,13 +827,23 @@ class MultiStopwatchManager {
             }
         }
 
+        // *** 关键修复：使用计时器的实际运行时间，而不是开始到结束的总时间 ***
+        const timer = this.getTimer(activityName);
+        const actualDuration = timer.elapsedTime; // 这是实际的活动时间（不包括暂停期间）
+        
+        // 计算实际的活动开始和结束时间
+        // 开始时间：从计时器开始时间计算
+        const actualStartTime = new Date(timer.startTime || startTime);
+        // 结束时间：开始时间 + 实际持续时间
+        const actualEndTime = new Date(actualStartTime.getTime() + actualDuration);
+
         // 添加新记录
         const activityRecord = {
             id: `stopwatch_${activityName}_${Date.now()}`,
             activityName: activityName,
-            startTime: new Date(startTime),
-            endTime: new Date(endTime),
-            duration: Math.floor((endTime - startTime) / (1000 * 60))
+            startTime: actualStartTime,
+            endTime: actualEndTime,
+            duration: Math.floor(actualDuration / (1000 * 60)) // 使用实际持续时间
         };
 
         completedActivities.unshift(activityRecord);
@@ -844,7 +854,7 @@ class MultiStopwatchManager {
         // 更新兼容数据
         this.saveCompatibleData();
 
-        console.log(`MultiStopwatchManager: 活动记录已保存 - ${activityName}, 持续 ${activityRecord.duration} 分钟`);
+        console.log(`MultiStopwatchManager: 活动记录已保存 - ${activityName}, 实际持续 ${activityRecord.duration} 分钟 (修复了暂停时间计算bug)`);
     }
 
     // 完成活动并重置计时器
@@ -870,10 +880,11 @@ class MultiStopwatchManager {
         
         // 只有当计时器有时间记录时才保存
         if (timer.elapsedTime > 0) {
-            const actualEndTime = endTime;
+            // *** 关键修复：使用计时器的实际开始时间和实际持续时间 ***
             const actualStartTime = timer.startTime || (endTime - timer.elapsedTime);
+            const actualEndTime = actualStartTime + timer.elapsedTime; // 开始时间 + 实际持续时间
             
-            console.log(`💾 保存活动记录: "${activityName}", 用时: ${Math.floor(timer.elapsedTime / 1000)}秒`);
+            console.log(`💾 保存活动记录: "${activityName}", 实际用时: ${Math.floor(timer.elapsedTime / 1000)}秒 (修复了暂停时间计算bug)`);
             
             // 保存活动记录
             this.completeActivity(activityName, actualStartTime, actualEndTime);
