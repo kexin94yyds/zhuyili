@@ -294,7 +294,7 @@
                 const { data, error } = await loginSupabase.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: `${window.location.origin}/index.html`
+                        redirectTo: 'https://zhuyili.netlify.app/index.html'
                     }
                 });
                 
@@ -329,7 +329,7 @@
                 const { data, error } = await loginSupabase.auth.signInWithOtp({
                     email: email,
                     options: {
-                        emailRedirectTo: `${window.location.origin}/index.html`
+                        emailRedirectTo: 'https://zhuyili.netlify.app/index.html'
                     }
                 });
                 
