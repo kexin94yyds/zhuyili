@@ -703,11 +703,19 @@ class MultiStopwatchManager {
             try {
                 console.log('🔄 MultiStopwatchManager: 正在同步数据到 Supabase...');
                 
+                // 获取当前用户
+                const { data: { user } } = await this.supabase.auth.getUser();
+                if (!user) {
+                    console.warn('MultiStopwatchManager: 用户未登录，跳过云端同步');
+                    return;
+                }
+                
                 // 保存多计时器数据
                 const { data: supabaseData, error } = await this.supabase
                     .from('multi_timers')
                     .upsert(Array.from(this.timers.entries()).map(([name, timer]) => ({
                         id: timer.id || crypto.randomUUID(), // 使用真正的 UUID
+                        user_id: user.id, // 关联用户ID
                         timer_name: name,
                         start_time: timer.startTime ? new Date(timer.startTime).toISOString() : null,
                         elapsed_time_ms: timer.elapsedTime || 0,
@@ -716,7 +724,7 @@ class MultiStopwatchManager {
                         created_at: new Date(timer.created).toISOString(),
                         updated_at: new Date().toISOString()
                     })), {
-                        onConflict: 'timer_name' // 使用 timer_name 作为冲突检测字段
+                        onConflict: 'user_id,timer_name' // 使用 user_id 和 timer_name 作为冲突检测字段
                     });
                 
                 if (error) {
@@ -910,9 +918,17 @@ class MultiStopwatchManager {
             try {
                 console.log('🔄 MultiStopwatchManager: 正在从 Supabase 加载数据...');
                 
+                // 获取当前用户
+                const { data: { user } } = await this.supabase.auth.getUser();
+                if (!user) {
+                    console.warn('MultiStopwatchManager: 用户未登录，跳过云端同步');
+                    return;
+                }
+                
                 const { data: supabaseData, error } = await this.supabase
                     .from('multi_timers')
                     .select('*')
+                    .eq('user_id', user.id)
                     .order('updated_at', { ascending: false });
                 
                 if (error) {

@@ -290,11 +290,17 @@
             
             showLoading();
             
+            // 根据当前环境选择重定向URL
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const redirectUrl = isLocal ? 
+                `${window.location.protocol}//${window.location.host}/index.html` : 
+                'https://zhuyili.netlify.app/index.html';
+            
             try {
                 const { data, error } = await loginSupabase.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
-                        redirectTo: 'https://zhuyili.netlify.app/index.html'
+                        redirectTo: redirectUrl
                     }
                 });
                 
@@ -325,11 +331,17 @@
             
             showLoading();
             
+            // 根据当前环境选择重定向URL
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const redirectUrl = isLocal ? 
+                `${window.location.protocol}//${window.location.host}/index.html` : 
+                'https://zhuyili.netlify.app/index.html';
+            
             try {
                 const { data, error } = await loginSupabase.auth.signInWithOtp({
                     email: email,
                     options: {
-                        emailRedirectTo: 'https://zhuyili.netlify.app/index.html'
+                        emailRedirectTo: redirectUrl
                     }
                 });
                 

@@ -116,21 +116,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
 
-                // 保存数据到localStorage
-                saveData();
-                
-                // 更新UI
-                if (typeof updateActivityList === 'function') {
-                    updateActivityList();
-                }
-                if (typeof updateCurrentActivityUI === 'function') {
-                    updateCurrentActivityUI();
-                }
-                if (typeof updateActivitySelector === 'function') {
-                    updateActivitySelector();
-                }
-                
-                showMessage(`成功导入 ${importCount} 条记录`, 'success');
+                // 保存数据到localStorage和Supabase
+                saveData().then(() => {
+                    // 更新UI
+                    if (typeof updateActivityList === 'function') {
+                        updateActivityList();
+                    }
+                    if (typeof updateCurrentActivityUI === 'function') {
+                        updateCurrentActivityUI();
+                    }
+                    if (typeof updateActivitySelector === 'function') {
+                        updateActivitySelector();
+                    }
+                    
+                    showMessage(`成功导入 ${importCount} 条记录`, 'success');
+                }).catch((error) => {
+                    console.error('保存导入数据失败:', error);
+                    showMessage(`导入 ${importCount} 条记录到本地成功，但云端同步失败`, 'warning');
+                });
                 
                 // 延迟关闭模态框
                 setTimeout(() => {

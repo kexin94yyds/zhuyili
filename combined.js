@@ -501,6 +501,7 @@ async function saveData() {
                     .from('current_activities')
                     .upsert({
                         id: currentActivity.id || generateId(),
+                        user_id: user.id, // 关联用户ID
                         activity_name: currentActivity.activityName,
                         start_time: currentActivity.startTime.toISOString(),
                         paused_time_ms: 0,
@@ -561,10 +562,18 @@ async function loadData() {
         try {
             console.log('🔄 正在从 Supabase 加载数据...');
             
-            // 加载活动记录
+            // 获取当前用户
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                console.warn('用户未登录，跳过云端数据加载');
+                return;
+            }
+            
+            // 加载活动记录（只加载当前用户的数据）
             const { data: supabaseActivities, error: activitiesError } = await supabase
                 .from('activities')
                 .select('*')
+                .eq('user_id', user.id)
                 .order('start_time', { ascending: false });
             
             if (activitiesError) {
@@ -596,10 +605,11 @@ async function loadData() {
                 }
             }
             
-            // 加载当前活动
+            // 加载当前活动（只加载当前用户的数据）
             const { data: supabaseCurrent, error: currentError } = await supabase
                 .from('current_activities')
                 .select('*')
+                .eq('user_id', user.id)
                 .eq('state', 'running')
                 .order('last_update', { ascending: false })
                 .limit(1);

@@ -1,0 +1,141 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试登录</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0A0A0A;
+            color: white;
+            padding: 50px;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        button {
+            padding: 15px 30px;
+            margin: 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #333;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>登录功能测试</h1>
+        
+        <button onclick="testSupabaseInit()">测试 Supabase 初始化</button>
+        <button onclick="testGoogleLogin()">测试 Google 登录</button>
+        <button onclick="clearLog()">清除日志</button>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- Supabase SDK -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="supabaseClient.js"></script>
+
+    <script>
+        let supabase = null;
+        
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollTop + 1000;
+            console.log(message);
+        }
+        
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+        
+        function testSupabaseInit() {
+            log('🔍 开始测试 Supabase 初始化...');
+            
+            // 检查 Supabase SDK 是否加载
+            if (typeof window.supabase === 'undefined') {
+                log('❌ Supabase SDK 未加载');
+                return;
+            }
+            log('✅ Supabase SDK 已加载');
+            
+            // 检查 supabaseClient 是否定义
+            if (typeof window.supabaseClient === 'undefined') {
+                log('❌ window.supabaseClient 未定义');
+                return;
+            }
+            log('✅ window.supabaseClient 已定义');
+            
+            // 尝试初始化
+            try {
+                const initResult = window.supabaseClient.init();
+                log(`初始化结果: ${initResult}`);
+                
+                if (initResult) {
+                    supabase = window.supabaseClient.getClient();
+                    log('✅ Supabase 客户端获取成功');
+                    log(`客户端对象: ${supabase ? '存在' : '不存在'}`);
+                } else {
+                    log('❌ Supabase 初始化失败');
+                }
+            } catch (error) {
+                log(`❌ 初始化异常: ${error.message}`);
+            }
+        }
+        
+        async function testGoogleLogin() {
+            if (!supabase) {
+                log('❌ Supabase 客户端未初始化，请先测试初始化');
+                return;
+            }
+            
+            log('🔍 开始测试 Google 登录...');
+            
+            try {
+                const { data, error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: `${window.location.origin}/index.html`
+                    }
+                });
+                
+                if (error) {
+                    log(`❌ Google 登录失败: ${error.message}`);
+                } else {
+                    log('✅ Google 登录请求成功，应该会跳转...');
+                }
+            } catch (error) {
+                log(`❌ Google 登录异常: ${error.message}`);
+            }
+        }
+        
+        // 页面加载完成后自动测试初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            log('📱 页面加载完成');
+            setTimeout(testSupabaseInit, 1000);
+        });
+    </script>
+</body>
+</html>
