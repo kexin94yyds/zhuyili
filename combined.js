@@ -471,18 +471,26 @@ async function saveData() {
             if (activities.length > 0) {
                 const { data: supabaseData, error } = await supabase
                     .from('activities')
-                    .upsert(activities.map(activity => ({
-                        id: activity.id || generateId(),
-                        user_id: user.id, // 关联用户ID
-                        activity_name: activity.activityName,
-                        start_time: activity.startTime.toISOString(),
-                        end_time: activity.endTime ? activity.endTime.toISOString() : null,
-                        duration_minutes: activity.duration || 0,
-                        note: activity.note || '',
-                        color: activity.color || getColorForActivity(activity.activityName),
-                        created_at: activity.startTime.toISOString(),
-                        updated_at: new Date().toISOString()
-                    })), {
+                    .upsert(activities.map(activity => {
+                        // 确保日期字段是Date对象
+                        const startTime = activity.startTime instanceof Date ? 
+                            activity.startTime : new Date(activity.startTime);
+                        const endTime = activity.endTime ? 
+                            (activity.endTime instanceof Date ? activity.endTime : new Date(activity.endTime)) : null;
+                        
+                        return {
+                            id: activity.id || generateId(),
+                            user_id: user.id, // 关联用户ID
+                            activity_name: activity.activityName,
+                            start_time: startTime.toISOString(),
+                            end_time: endTime ? endTime.toISOString() : null,
+                            duration_minutes: activity.duration || 0,
+                            note: activity.note || '',
+                            color: activity.color || getColorForActivity(activity.activityName),
+                            created_at: startTime.toISOString(),
+                            updated_at: new Date().toISOString()
+                        };
+                    }), {
                         onConflict: 'user_id,id' // 使用用户ID和活动ID作为冲突检测
                     });
                 
