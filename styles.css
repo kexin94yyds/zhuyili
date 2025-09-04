@@ -33,7 +33,7 @@ html, body {
 /* 头部样式 */
 header {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     margin: 0;
     padding: 10px 20px;
@@ -41,23 +41,39 @@ header {
     width: 100vw;
     background-color: #111;
     position: relative;
+    min-height: 60px;
 }
 
 .header-controls {
     display: flex;
     align-items: center;
     gap: 10px;
-    position: absolute;
-    right: 20px;
+    flex-shrink: 0;
 }
 
-/* 用户信息样式 */
-.user-info {
+/* 用户下拉菜单样式 */
+.user-dropdown {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.user-avatar-container {
     display: flex;
     align-items: center;
     gap: 8px;
-    position: absolute;
-    left: 20px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    user-select: none;
+}
+
+.user-avatar-container:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
 }
 
 .user-avatar {
@@ -69,19 +85,67 @@ header {
     transition: all 0.3s ease;
 }
 
-.user-avatar:hover {
-    border-color: #666;
-    transform: scale(1.05);
-}
-
 .user-name {
     color: #e0e0e0;
     font-size: 14px;
     font-weight: 500;
-    max-width: 150px;
+    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.dropdown-arrow {
+    color: #888;
+    font-size: 10px;
+    transition: transform 0.3s ease;
+}
+
+.user-dropdown.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+/* 下拉菜单 */
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 150px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.user-dropdown.active .dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    color: #e0e0e0;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-radius: 6px;
+    margin: 4px;
+}
+
+.dropdown-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.logout-icon {
+    font-size: 16px;
 }
 
 h1 {
@@ -95,9 +159,14 @@ h1 {
         0 0 10px rgba(240, 240, 240, 0.4),
         0 0 20px rgba(240, 240, 240, 0.2),
         0 0 30px rgba(240, 240, 240, 0.1);
-    position: relative;
+    position: absolute;
+    left: 45%;
+    transform: translateX(-50%);
     opacity: 0.95;
     animation: subtle-glow 1.5s ease-in-out infinite alternate;
+    flex: 1;
+    text-align: center;
+    margin: 0;
 }
 
 @keyframes subtle-glow {

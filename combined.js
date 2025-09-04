@@ -129,6 +129,9 @@ function initApp() {
     // 更新用户信息显示
     updateUserInfo();
     
+    // 初始化用户下拉菜单
+    initUserDropdown();
+    
     // 初始化多计时器管理器
     if (typeof MultiStopwatchManager !== 'undefined') {
         window.multiStopwatchManager = new MultiStopwatchManager();
@@ -164,11 +167,7 @@ function initApp() {
     endButton.addEventListener('click', endActivity);
     showStatsButton.addEventListener('click', showStatistics);
     
-    // 添加登出按钮事件监听器
-    const logoutButton = document.getElementById('logout-btn');
-    if (logoutButton) {
-        logoutButton.addEventListener('click', logout);
-    }
+    // 登出按钮事件监听器已移到用户下拉菜单中
     
     // 添加Enter键快捷启动
     activityNameInput.addEventListener('keypress', function(event) {
@@ -218,13 +217,46 @@ function initApp() {
     showStatistics();
 }
 
+// 初始化用户下拉菜单
+function initUserDropdown() {
+    const userAvatarContainer = document.getElementById('user-avatar-container');
+    const userDropdown = document.querySelector('.user-dropdown');
+    const logoutBtn = document.getElementById('logout-btn');
+    
+    if (userAvatarContainer && userDropdown) {
+        // 点击头像容器切换下拉菜单
+        userAvatarContainer.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userDropdown.classList.toggle('active');
+        });
+        
+        // 点击登出按钮
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                logout();
+                userDropdown.classList.remove('active');
+            });
+        }
+        
+        // 点击页面其他地方关闭下拉菜单
+        document.addEventListener('click', (e) => {
+            if (!userDropdown.contains(e.target)) {
+                userDropdown.classList.remove('active');
+            }
+        });
+    }
+}
+
 // 更新用户信息显示
 async function updateUserInfo() {
     if (!supabase) return;
     
     try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+        const userAvatarContainer = document.getElementById('user-avatar-container');
+        
+        if (user && userAvatarContainer) {
             const userAvatar = document.getElementById('user-avatar');
             const userName = document.getElementById('user-name');
             
@@ -232,13 +264,11 @@ async function updateUserInfo() {
                 // 显示用户头像
                 if (user.user_metadata?.avatar_url) {
                     userAvatar.src = user.user_metadata.avatar_url;
-                    userAvatar.style.display = 'block';
                 } else if (user.user_metadata?.picture) {
                     userAvatar.src = user.user_metadata.picture;
-                    userAvatar.style.display = 'block';
                 } else {
-                    // 如果没有头像，使用默认头像或隐藏
-                    userAvatar.style.display = 'none';
+                    // 如果没有头像，使用默认头像
+                    userAvatar.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM2NjYiLz4KPHN2ZyB4PSI4IiB5PSI4IiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSI+CjxjaXJjbGUgY3g9IjgiIGN5PSI2IiByPSIzIiBmaWxsPSIjZTBmMGYwIi8+CjxwYXRoIGQ9Ik0yIDE0QzIgMTEuNzkwOSAzLjc5MDg2IDEwIDYgMTBIMTBIMTBDMTIuMjA5MSAxMCAxNCAxMS43OTA5IDE0IDE0VjE0SDJWMTQiIGZpbGw9IiNlMGYwZjAiLz4KPC9zdmc+Cjwvc3ZnPgo=';
                 }
                 
                 // 显示用户名字
@@ -247,16 +277,17 @@ async function updateUserInfo() {
                                   user.email?.split('@')[0] || 
                                   '用户';
                 userName.textContent = displayName;
-                userName.style.display = 'block';
+                
+                // 显示用户信息容器
+                userAvatarContainer.style.display = 'flex';
                 
                 console.log('✅ 用户信息已更新:', displayName);
             }
         } else {
-            // 用户未登录，隐藏用户信息
-            const userAvatar = document.getElementById('user-avatar');
-            const userName = document.getElementById('user-name');
-            if (userAvatar) userAvatar.style.display = 'none';
-            if (userName) userName.style.display = 'none';
+            // 隐藏用户信息容器
+            if (userAvatarContainer) {
+                userAvatarContainer.style.display = 'none';
+            }
         }
     } catch (error) {
         console.error('❌ 获取用户信息失败:', error);
