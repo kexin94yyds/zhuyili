@@ -702,7 +702,8 @@ input[type="date"]:focus {
         font-size: 20px;
         letter-spacing: 4px;
         margin: 8px 0 0 0;
-        text-align: left;
+        text-align: center;
+        width: 100%;
     }
     
     .user-dropdown {
