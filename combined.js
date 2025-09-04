@@ -58,6 +58,12 @@ function initSupabase() {
             supabase = window.supabaseClient.getClient();
             console.log('✅ Supabase 客户端初始化成功');
             
+            // 监听用户认证状态变化
+            supabase.auth.onAuthStateChange((event, session) => {
+                console.log('🔐 认证状态变化:', event, session?.user?.email);
+                updateUserInfo();
+            });
+            
             // 测试连接
             setTimeout(async () => {
                 if (window.supabaseClient && window.supabaseClient.testConnection) {
@@ -119,6 +125,9 @@ function initApp() {
     
     // 初始化 Supabase 客户端
     initSupabase();
+    
+    // 更新用户信息显示
+    updateUserInfo();
     
     // 初始化多计时器管理器
     if (typeof MultiStopwatchManager !== 'undefined') {
@@ -209,6 +218,51 @@ function initApp() {
     showStatistics();
 }
 
+// 更新用户信息显示
+async function updateUserInfo() {
+    if (!supabase) return;
+    
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const userAvatar = document.getElementById('user-avatar');
+            const userName = document.getElementById('user-name');
+            
+            if (userAvatar && userName) {
+                // 显示用户头像
+                if (user.user_metadata?.avatar_url) {
+                    userAvatar.src = user.user_metadata.avatar_url;
+                    userAvatar.style.display = 'block';
+                } else if (user.user_metadata?.picture) {
+                    userAvatar.src = user.user_metadata.picture;
+                    userAvatar.style.display = 'block';
+                } else {
+                    // 如果没有头像，使用默认头像或隐藏
+                    userAvatar.style.display = 'none';
+                }
+                
+                // 显示用户名字
+                const displayName = user.user_metadata?.full_name || 
+                                  user.user_metadata?.name || 
+                                  user.email?.split('@')[0] || 
+                                  '用户';
+                userName.textContent = displayName;
+                userName.style.display = 'block';
+                
+                console.log('✅ 用户信息已更新:', displayName);
+            }
+        } else {
+            // 用户未登录，隐藏用户信息
+            const userAvatar = document.getElementById('user-avatar');
+            const userName = document.getElementById('user-name');
+            if (userAvatar) userAvatar.style.display = 'none';
+            if (userName) userName.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('❌ 获取用户信息失败:', error);
+    }
+}
+
 // 更新当前时间显示
 function updateCurrentTime() {
     const now = new Date();
@@ -256,6 +310,8 @@ async function logout() {
             console.log('登出成功');
             // 清除本地数据
             localStorage.clear();
+            // 更新用户信息显示
+            updateUserInfo();
             // 跳转到登录页面
             window.location.href = 'login.html';
         }
