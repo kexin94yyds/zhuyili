@@ -483,7 +483,7 @@ async function saveData() {
                         created_at: activity.startTime.toISOString(),
                         updated_at: new Date().toISOString()
                     })), {
-                        onConflict: 'id'
+                        onConflict: 'user_id,id' // 使用用户ID和活动ID作为冲突检测
                     });
                 
                             if (error) {
