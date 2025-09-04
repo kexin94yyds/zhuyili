@@ -160,7 +160,7 @@ h1 {
         0 0 20px rgba(240, 240, 240, 0.2),
         0 0 30px rgba(240, 240, 240, 0.1);
     position: absolute;
-    left: 40%;
+    left: 45%;
     transform: translateX(-50%);
     opacity: 0.95;
     animation: subtle-glow 1.5s ease-in-out infinite alternate;
@@ -687,13 +687,6 @@ input[type="date"]:focus {
 
 /* 响应式设计 */
 @media (max-width: 600px) {
-    /* 移动端标题优化 */
-    h1 {
-        left: 35%;
-        font-size: 20px;
-        letter-spacing: 4px;
-    }
-    
     .activity-input, .date-selector {
         flex-direction: column;
         padding: 0 20px;
@@ -999,13 +992,6 @@ input[type="date"]:focus {
 
 /* 改进按钮组的响应式布局 */
 @media (max-width: 480px) {
-    /* 小屏幕标题进一步优化 */
-    h1 {
-        left: 30%;
-        font-size: 16px;
-        letter-spacing: 2px;
-    }
-    
     .timer-actions {
         gap: 4px;
     }
