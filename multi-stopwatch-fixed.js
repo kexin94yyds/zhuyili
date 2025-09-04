@@ -161,12 +161,34 @@ class MultiStopwatchManager {
     }
 
     // 删除计时器
-    delete(activityName) {
+    async delete(activityName) {
         if (this.timers.has(activityName)) {
             // 停止更新间隔
             if (this.updateIntervals.has(activityName)) {
                 clearInterval(this.updateIntervals.get(activityName));
                 this.updateIntervals.delete(activityName);
+            }
+            
+            // 从Supabase数据库中删除记录
+            if (this.supabase) {
+                try {
+                    const { data: { user } } = await this.supabase.auth.getUser();
+                    if (user) {
+                        const { error } = await this.supabase
+                            .from('multi_timers')
+                            .delete()
+                            .eq('user_id', user.id)
+                            .eq('timer_name', activityName);
+                        
+                        if (error) {
+                            console.error('❌ 删除计时器记录失败:', error);
+                        } else {
+                            console.log('✅ 计时器记录已从数据库删除');
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ 删除计时器记录时出错:', error);
+                }
             }
             
             this.timers.delete(activityName);
@@ -538,8 +560,9 @@ class MultiStopwatchManager {
                 
             case 'delete':
                 if (confirm(`确定要删除"${timer.name}"计时器吗？删除后将无法恢复。`)) {
-                    this.delete(timer.name);
-                    this.showNotification(`"${timer.name}" 计时器已删除`);
+                    this.delete(timer.name).then(() => {
+                        this.showNotification(`"${timer.name}" 计时器已删除`);
+                    });
                 }
                 break;
         }
