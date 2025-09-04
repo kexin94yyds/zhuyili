@@ -706,11 +706,11 @@ input[type="date"]:focus {
         width: 100%;
     }
     
-    h1 {
+    .user-dropdown {
         order: 1;
     }
     
-    .user-dropdown {
+    h1 {
         order: 2;
     }
     
