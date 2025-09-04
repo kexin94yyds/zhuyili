@@ -73,6 +73,8 @@
             <div class="header-controls">
                 <button id="export-btn" class="btn utility-btn">导出数据</button>
                 <button id="import-btn" class="btn utility-btn">导入数据</button>
+                <button id="logout-btn" class="btn utility-btn">登出</button>
+                <div id="sync-status" class="sync-status">🔄 同步中...</div>
                 <div id="current-time" class="current-time"></div>
             </div>
         </header>
@@ -211,6 +213,52 @@
         </div>
     </div>
 
+    <!-- Supabase SDK -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- Supabase 客户端配置 -->
+    <script src="supabaseClient.js"></script>
+    
+    <!-- 身份验证检查 -->
+    <script>
+        // 检查用户是否已登录
+        async function checkAuth() {
+            try {
+                if (window.supabaseClient && window.supabaseClient.init()) {
+                    const supabase = window.supabaseClient.getClient();
+                    const { data: { session } } = await supabase.auth.getSession();
+                    
+                    if (!session) {
+                        console.log('用户未登录，跳转到登录页面');
+                        window.location.href = 'login.html';
+                        return false;
+                    }
+                    
+                    console.log('用户已登录:', session.user.email);
+                    return true;
+                } else {
+                    console.warn('Supabase 未初始化，允许访问');
+                    return true;
+                }
+            } catch (error) {
+                console.error('检查登录状态失败:', error);
+                // 如果检查失败，允许访问（避免阻塞用户）
+                return true;
+            }
+        }
+        
+        // 页面加载时检查登录状态
+        document.addEventListener('DOMContentLoaded', async function() {
+            const isAuthenticated = await checkAuth();
+            if (!isAuthenticated) {
+                return; // 页面会跳转到登录页面
+            }
+            
+            // 如果已登录，继续初始化应用
+            console.log('用户已认证，继续加载应用...');
+        });
+    </script>
+    
     <script src="export_import.js"></script>
     <script src="combined.js"></script>
     <script src="multi-stopwatch-fixed.js"></script>

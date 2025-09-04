@@ -95,6 +95,30 @@ h2 {
     color: #888;
 }
 
+.sync-status {
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: #333;
+    color: #ccc;
+    transition: all 0.3s ease;
+}
+
+.sync-status.syncing {
+    background-color: #856404;
+    color: #fff3cd;
+}
+
+.sync-status.success {
+    background-color: #155724;
+    color: #d4edda;
+}
+
+.sync-status.error {
+    background-color: #721c24;
+    color: #f8d7da;
+}
+
 /* 按钮样式 - DARK 主题 */
 .btn {
     padding: 10px 15px;

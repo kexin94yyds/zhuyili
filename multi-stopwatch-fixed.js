@@ -3,8 +3,30 @@ class MultiStopwatchManager {
     constructor() {
         this.timers = new Map(); // 存储所有活动的计时器
         this.updateIntervals = new Map(); // 存储更新间隔ID
-        this.loadData();
-        this.initMainPageUI();
+        this.supabase = null; // Supabase 客户端
+        this.initSupabase();
+        this.loadData().then(() => {
+            this.initMainPageUI();
+        });
+    }
+
+    // 初始化 Supabase 客户端
+    initSupabase() {
+        console.log('🚀 MultiStopwatchManager: 开始初始化 Supabase...');
+        console.log('🔍 检查 window.supabaseClient:', !!window.supabaseClient);
+        
+        try {
+            if (window.supabaseClient && window.supabaseClient.init()) {
+                this.supabase = window.supabaseClient.getClient();
+                console.log('✅ MultiStopwatchManager: Supabase 客户端初始化成功');
+                console.log('🔗 Supabase 客户端对象:', this.supabase);
+            } else {
+                console.warn('⚠️ MultiStopwatchManager: Supabase 客户端初始化失败');
+                console.log('❌ 可能的原因: supabaseClient 未定义或 init() 返回 false');
+            }
+        } catch (error) {
+            console.error('❌ MultiStopwatchManager: Supabase 初始化失败:', error);
+        }
     }
 
     // 创建或获取活动计时器
@@ -663,10 +685,8 @@ class MultiStopwatchManager {
         }
     }
 
-    // 保存数据
-    saveData() {
-        console.log('🔍 [MultiStopwatch] saveData函数被调用');
-        
+    // 保存数据到本地存储和 Supabase
+    async saveData() {
         const data = {};
         this.timers.forEach((timer, name) => {
             data[name] = {
@@ -678,8 +698,37 @@ class MultiStopwatchManager {
         // 同时保存兼容旧统计系统的数据格式
         this.saveCompatibleData();
         
-        // 尝试保存到后端
-        this.saveToBackend();
+        // 如果 Supabase 连接成功，也保存到云端
+        if (this.supabase) {
+            try {
+                console.log('🔄 MultiStopwatchManager: 正在同步数据到 Supabase...');
+                
+                // 保存多计时器数据
+                const { data: supabaseData, error } = await this.supabase
+                    .from('multi_timers')
+                    .upsert(Array.from(this.timers.entries()).map(([name, timer]) => ({
+                        id: timer.id || crypto.randomUUID(), // 使用真正的 UUID
+                        timer_name: name,
+                        start_time: timer.startTime ? new Date(timer.startTime).toISOString() : null,
+                        elapsed_time_ms: timer.elapsedTime || 0,
+                        is_running: timer.isRunning || false,
+                        laps: timer.laps || [],
+                        created_at: new Date(timer.created).toISOString(),
+                        updated_at: new Date().toISOString()
+                    })), {
+                        onConflict: 'timer_name' // 使用 timer_name 作为冲突检测字段
+                    });
+                
+                if (error) {
+                    console.error('❌ MultiStopwatchManager: 保存到 Supabase 失败:', error);
+                } else {
+                    console.log('✅ MultiStopwatchManager: 数据已同步到 Supabase');
+                }
+                
+            } catch (error) {
+                console.error('❌ MultiStopwatchManager: Supabase 同步失败:', error);
+            }
+        }
     }
 
     // *** 关键修复：清除当前活动记录 ***
@@ -825,14 +874,16 @@ class MultiStopwatchManager {
         }
     }
 
-    // 加载数据
-    loadData() {
+    // 从本地存储和 Supabase 加载数据
+    async loadData() {
         console.log('🔍 loadData() 被调用');
+        
+        // 首先从本地存储加载
         const data = localStorage.getItem('multiStopwatchData');
         if (data) {
             try {
                 const parsed = JSON.parse(data);
-                console.log('📦 加载的数据:', parsed);
+                console.log('📦 从本地存储加载的数据:', parsed);
                 Object.entries(parsed).forEach(([name, timer]) => {
                     this.timers.set(name, {
                         ...timer
@@ -848,10 +899,63 @@ class MultiStopwatchManager {
                     }
                 });
             } catch (error) {
-                console.error('加载数据失败:', error);
+                console.error('加载本地数据失败:', error);
             }
         } else {
-            console.log('⚠️ 没有找到存储的数据');
+            console.log('⚠️ 没有找到本地存储的数据');
+        }
+        
+        // 如果 Supabase 连接成功，尝试从云端加载最新数据
+        if (this.supabase) {
+            try {
+                console.log('🔄 MultiStopwatchManager: 正在从 Supabase 加载数据...');
+                
+                const { data: supabaseData, error } = await this.supabase
+                    .from('multi_timers')
+                    .select('*')
+                    .order('updated_at', { ascending: false });
+                
+                if (error) {
+                    console.error('❌ MultiStopwatchManager: 从 Supabase 加载失败:', error);
+                } else if (supabaseData && supabaseData.length > 0) {
+                    console.log(`✅ MultiStopwatchManager: 从 Supabase 加载了 ${supabaseData.length} 条计时器记录`);
+                    
+                    // 转换数据格式并合并
+                    supabaseData.forEach(timerData => {
+                        const name = timerData.timer_name;
+                        const existingTimer = this.timers.get(name);
+                        
+                        // 如果本地没有这个计时器，或者云端数据更新，则使用云端数据
+                        if (!existingTimer || new Date(timerData.updated_at) > new Date(existingTimer.lastUpdate || 0)) {
+                            const cloudTimer = {
+                                id: timerData.id, // 保存云端 ID
+                                name: name,
+                                startTime: timerData.start_time ? new Date(timerData.start_time).getTime() : null,
+                                elapsedTime: timerData.elapsed_time_ms || 0,
+                                isRunning: timerData.is_running || false,
+                                laps: timerData.laps || [],
+                                created: timerData.created_at ? new Date(timerData.created_at).getTime() : Date.now(),
+                                lastUpdate: new Date(timerData.updated_at).getTime()
+                            };
+                            
+                            this.timers.set(name, cloudTimer);
+                            console.log(`☁️ 从云端恢复计时器: ${name}`);
+                            
+                            // 如果计时器正在运行，重启更新间隔
+                            if (cloudTimer.isRunning) {
+                                console.log(`🚀 恢复云端运行状态: ${name}`);
+                                const intervalId = setInterval(() => {
+                                    this.updateTimerCard(name);
+                                }, 100);
+                                this.updateIntervals.set(name, intervalId);
+                            }
+                        }
+                    });
+                }
+                
+            } catch (error) {
+                console.error('❌ MultiStopwatchManager: 从 Supabase 加载数据失败:', error);
+            }
         }
     }
 
@@ -861,38 +965,6 @@ class MultiStopwatchManager {
             clearInterval(intervalId);
         });
         this.updateIntervals.clear();
-    }
-
-    // 保存到后端API
-    saveToBackend() {
-        console.log('🌐 [MultiStopwatch] 正在保存到后端...');
-        
-        // 获取兼容格式的数据
-        const compatibleData = {
-            activities: JSON.parse(localStorage.getItem('timeTrackerActivities') || '[]'),
-            currentActivity: JSON.parse(localStorage.getItem('timeTrackerData') || '{}').currentActivity
-        };
-        
-        console.log('📊 [MultiStopwatch] 要保存的数据:', compatibleData);
-        
-        // 调用后端API
-        fetch('/api/activities', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(compatibleData)
-        })
-        .then(response => {
-            if (response.ok) {
-                console.log('✅ [MultiStopwatch] 数据已保存到后端');
-            } else {
-                console.error('❌ [MultiStopwatch] 保存到后端失败');
-            }
-        })
-        .catch(error => {
-            console.error('❌ [MultiStopwatch] 后端保存失败:', error);
-        });
     }
 }
 
@@ -914,31 +986,34 @@ window.addEventListener('beforeunload', () => {
     }
 }); 
 
-// 页面同步逻辑
-if (typeof window !== 'undefined') {
-    window.addEventListener('focus', () => {
-        if (window.multiStopwatchManager) {
-            window.multiStopwatchManager.loadData();
-            window.multiStopwatchManager.updateMainPageUI();
-            window.multiStopwatchManager.startRealTimeUpdate();
-            console.log('🔄 页面focus，已强制同步状态');
-        }
-    });
-    window.addEventListener('storage', (e) => {
-        if (e.key === 'multiStopwatchData' && window.multiStopwatchManager) {
-            window.multiStopwatchManager.loadData();
-            window.multiStopwatchManager.updateMainPageUI();
-            window.multiStopwatchManager.startRealTimeUpdate();
-            console.log('🔄 storage事件，已强制同步状态');
-        }
-    });
-    // 页面初次加载也同步一次
-    window.addEventListener('DOMContentLoaded', () => {
-        if (window.multiStopwatchManager) {
-            window.multiStopwatchManager.loadData();
-            window.multiStopwatchManager.updateMainPageUI();
-            window.multiStopwatchManager.startRealTimeUpdate();
-            console.log('🔄 DOMContentLoaded，已强制同步状态');
-        }
-    });
-} 
+    // 页面同步逻辑
+    if (typeof window !== 'undefined') {
+        window.addEventListener('focus', () => {
+            if (window.multiStopwatchManager) {
+                window.multiStopwatchManager.loadData().then(() => {
+                    window.multiStopwatchManager.updateMainPageUI();
+                    window.multiStopwatchManager.startRealTimeUpdate();
+                    console.log('🔄 页面focus，已强制同步状态');
+                });
+            }
+        });
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'multiStopwatchData' && window.multiStopwatchManager) {
+                window.multiStopwatchManager.loadData().then(() => {
+                    window.multiStopwatchManager.updateMainPageUI();
+                    window.multiStopwatchManager.startRealTimeUpdate();
+                    console.log('🔄 storage事件，已强制同步状态');
+                });
+            }
+        });
+        // 页面初次加载也同步一次
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.multiStopwatchManager) {
+                window.multiStopwatchManager.loadData().then(() => {
+                    window.multiStopwatchManager.updateMainPageUI();
+                    window.multiStopwatchManager.startRealTimeUpdate();
+                    console.log('🔄 DOMContentLoaded，已强制同步状态');
+                });
+            }
+        });
+    } 

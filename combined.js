@@ -50,9 +50,38 @@ let dateSelector;
 // 图表相关变量
 let timeChart = null;
 
+// 初始化 Supabase 客户端
+function initSupabase() {
+    try {
+        // 使用全局的 Supabase 客户端
+        if (window.supabaseClient && window.supabaseClient.init()) {
+            supabase = window.supabaseClient.getClient();
+            console.log('✅ Supabase 客户端初始化成功');
+            
+            // 测试连接
+            setTimeout(async () => {
+                if (window.supabaseClient && window.supabaseClient.testConnection) {
+                    const isConnected = await window.supabaseClient.testConnection();
+                    if (isConnected) {
+                        console.log('🎉 Supabase 完全连接成功！');
+                    } else {
+                        console.log('⚠️ Supabase 连接测试失败，将使用本地存储模式');
+                    }
+                }
+            }, 2000);
+        } else {
+            console.warn('⚠️ Supabase 客户端初始化失败，使用本地存储模式');
+        }
+    } catch (error) {
+        console.error('❌ Supabase 初始化失败:', error);
+        console.log('将使用本地存储模式');
+    }
+}
+
 // 初始化DOM元素引用
 function initDOMElements() {
     currentTimeElement = document.getElementById('current-time');
+    syncStatusElement = document.getElementById('sync-status');
     activityNameInput = document.getElementById('activity-name');
     startButton = document.getElementById('start-btn');
     endButton = document.getElementById('end-btn');
@@ -88,26 +117,31 @@ function initApp() {
     // 初始化DOM元素引用
     initDOMElements();
     
+    // 初始化 Supabase 客户端
+    initSupabase();
+    
     // 初始化多计时器管理器
     if (typeof MultiStopwatchManager !== 'undefined') {
         window.multiStopwatchManager = new MultiStopwatchManager();
     }
     
-    // 从本地存储加载数据
-    loadData();
+    // 从本地存储和云端加载数据
+    loadData().then(() => {
+        // 数据加载完成后更新UI
+        updateActivityList();
+        
+        // 如果有正在进行的活动，更新UI并开始计时
+        if (currentActivity) {
+            updateCurrentActivityUI();
+            startDurationTimer();
+        }
+    });
     
     // 设置当前时间显示
     updateCurrentTime();
     setInterval(updateCurrentTime, 1000);
     
-    // 如果有正在进行的活动，更新UI并开始计时
-    if (currentActivity) {
-        updateCurrentActivityUI();
-        startDurationTimer();
-    }
-    
-    // 更新活动列表
-    updateActivityList();
+    // 这些UI更新现在在 loadData().then() 中处理
     
     // 设置统计日期默认为今天
     const today = new Date();
@@ -120,6 +154,12 @@ function initApp() {
     startButton.addEventListener('click', startActivity);
     endButton.addEventListener('click', endActivity);
     showStatsButton.addEventListener('click', showStatistics);
+    
+    // 添加登出按钮事件监听器
+    const logoutButton = document.getElementById('logout-btn');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', logout);
+    }
     
     // 添加Enter键快捷启动
     activityNameInput.addEventListener('keypress', function(event) {
@@ -174,6 +214,54 @@ function updateCurrentTime() {
     const now = new Date();
     if (currentTimeElement) {
         currentTimeElement.textContent = formatDateTime(now);
+    }
+}
+
+// 更新同步状态显示
+function updateSyncStatus(status, message) {
+    if (!syncStatusElement) return;
+    
+    syncStatusElement.className = `sync-status ${status}`;
+    syncStatusElement.textContent = message;
+    
+    // 如果是成功状态，3秒后自动隐藏
+    if (status === 'success') {
+        setTimeout(() => {
+            if (syncStatusElement) {
+                syncStatusElement.textContent = '✅ 已同步';
+                setTimeout(() => {
+                    if (syncStatusElement) {
+                        syncStatusElement.textContent = '🔄 同步中...';
+                        syncStatusElement.className = 'sync-status syncing';
+                    }
+                }, 2000);
+            }
+        }, 3000);
+    }
+}
+
+// 登出功能
+async function logout() {
+    if (!supabase) {
+        console.warn('Supabase 未初始化，无法登出');
+        return;
+    }
+    
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            console.error('登出失败:', error);
+            alert('登出失败: ' + error.message);
+        } else {
+            console.log('登出成功');
+            // 清除本地数据
+            localStorage.clear();
+            // 跳转到登录页面
+            window.location.href = 'login.html';
+        }
+    } catch (error) {
+        console.error('登出异常:', error);
+        alert('登出过程中发生异常');
     }
 }
 
@@ -357,69 +445,185 @@ function getActivityNames() {
     return Array.from(namesSet);
 }
 
-// 保存数据到本地存储和后端
-function saveData() {
-    console.log('🔍 saveData函数被调用');
-    
+// 保存数据到本地存储和 Supabase
+async function saveData() {
     const data = {
         activities: activities,
         currentActivity: currentActivity
     };
     
-    console.log('📊 要保存的数据:', data);
-    
-    // 保存到localStorage（确保基本功能）
+    // 保存到本地存储
     localStorage.setItem('timeTrackerData', JSON.stringify(data));
-    console.log('✅ 数据已保存到localStorage');
     
-    // 尝试保存到后端
-    console.log('🌐 正在保存到后端...');
-    fetch('/api/activities', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => {
-        if (response.ok) {
-            console.log('✅ 数据已保存到后端');
-        } else {
-            console.error('❌ 保存到后端失败');
+    // 如果 Supabase 连接成功，也保存到云端
+    if (supabase && window.supabaseClient && window.supabaseClient.isConnected()) {
+        try {
+            console.log('🔄 正在同步数据到 Supabase...');
+            
+            // 获取当前用户
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                console.warn('用户未登录，跳过云端同步');
+                return;
+            }
+            
+            // 保存活动记录
+            if (activities.length > 0) {
+                const { data: supabaseData, error } = await supabase
+                    .from('activities')
+                    .upsert(activities.map(activity => ({
+                        id: activity.id || generateId(),
+                        user_id: user.id, // 关联用户ID
+                        activity_name: activity.activityName,
+                        start_time: activity.startTime.toISOString(),
+                        end_time: activity.endTime ? activity.endTime.toISOString() : null,
+                        duration_minutes: activity.duration || 0,
+                        note: activity.note || '',
+                        color: activity.color || getColorForActivity(activity.activityName),
+                        created_at: activity.startTime.toISOString(),
+                        updated_at: new Date().toISOString()
+                    })), {
+                        onConflict: 'id'
+                    });
+                
+                            if (error) {
+                console.error('❌ 保存活动记录到 Supabase 失败:', error);
+                updateSyncStatus('error', '❌ 同步失败');
+            } else {
+                console.log('✅ 活动记录已同步到 Supabase');
+                updateSyncStatus('success', '✅ 活动已同步');
+            }
+            }
+            
+            // 保存当前活动
+            if (currentActivity) {
+                const { data: currentData, error: currentError } = await supabase
+                    .from('current_activities')
+                    .upsert({
+                        id: currentActivity.id || generateId(),
+                        activity_name: currentActivity.activityName,
+                        start_time: currentActivity.startTime.toISOString(),
+                        paused_time_ms: 0,
+                        total_elapsed_ms: 0,
+                        state: 'running',
+                        last_update: new Date().toISOString()
+                    }, {
+                        onConflict: 'id'
+                    });
+                
+                if (currentError) {
+                    console.error('❌ 保存当前活动到 Supabase 失败:', currentError);
+                    updateSyncStatus('error', '❌ 同步失败');
+                } else {
+                    console.log('✅ 当前活动已同步到 Supabase');
+                    updateSyncStatus('success', '✅ 当前活动已同步');
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Supabase 同步失败:', error);
         }
-    })
-    .catch(error => {
-        console.error('❌ 后端保存失败，但localStorage已保存:', error);
-    });
+    }
 }
 
-// 从本地存储加载数据
-function loadData() {
+// 从本地存储和 Supabase 加载数据
+async function loadData() {
+    // 首先从本地存储加载
     const dataString = localStorage.getItem('timeTrackerData');
     
-    if (!dataString) return;
-    
-    try {
-        const data = JSON.parse(dataString);
-        
-        // 恢复日期对象
-        activities = data.activities.map(activity => ({
-            ...activity,
-            startTime: new Date(activity.startTime),
-            endTime: activity.endTime ? new Date(activity.endTime) : null
-        }));
-        
-        if (data.currentActivity) {
-            currentActivity = {
-                ...data.currentActivity,
-                startTime: new Date(data.currentActivity.startTime),
-                endTime: data.currentActivity.endTime ? new Date(data.currentActivity.endTime) : null
-            };
+    if (dataString) {
+        try {
+            const data = JSON.parse(dataString);
+            
+            // 恢复日期对象
+            activities = data.activities.map(activity => ({
+                ...activity,
+                startTime: new Date(activity.startTime),
+                endTime: activity.endTime ? new Date(activity.endTime) : null
+            }));
+            
+            if (data.currentActivity) {
+                currentActivity = {
+                    ...data.currentActivity,
+                    startTime: new Date(data.currentActivity.startTime),
+                    endTime: data.currentActivity.endTime ? new Date(data.currentActivity.endTime) : null
+                };
+            }
+        } catch (error) {
+            console.error('加载本地数据失败:', error);
+            activities = [];
+            currentActivity = null;
         }
-    } catch (error) {
-        console.error('加载数据失败:', error);
-        activities = [];
-        currentActivity = null;
+    }
+    
+    // 如果 Supabase 连接成功，尝试从云端加载最新数据
+    if (supabase && window.supabaseClient && window.supabaseClient.isConnected()) {
+        try {
+            console.log('🔄 正在从 Supabase 加载数据...');
+            
+            // 加载活动记录
+            const { data: supabaseActivities, error: activitiesError } = await supabase
+                .from('activities')
+                .select('*')
+                .order('start_time', { ascending: false });
+            
+            if (activitiesError) {
+                console.error('❌ 从 Supabase 加载活动记录失败:', activitiesError);
+                updateSyncStatus('error', '❌ 加载失败');
+            } else if (supabaseActivities && supabaseActivities.length > 0) {
+                console.log(`✅ 从 Supabase 加载了 ${supabaseActivities.length} 条活动记录`);
+                updateSyncStatus('success', `✅ 已加载 ${supabaseActivities.length} 条记录`);
+                
+                // 转换数据格式
+                const cloudActivities = supabaseActivities.map(activity => ({
+                    id: activity.id,
+                    activityName: activity.activity_name,
+                    startTime: new Date(activity.start_time),
+                    endTime: activity.end_time ? new Date(activity.end_time) : null,
+                    duration: activity.duration_minutes || 0,
+                    note: activity.note || '',
+                    color: activity.color || getColorForActivity(activity.activity_name)
+                }));
+                
+                // 合并数据（云端数据优先）
+                if (activities.length === 0) {
+                    activities = cloudActivities;
+                } else {
+                    // 简单的合并策略：保留本地数据，添加云端新数据
+                    const localIds = new Set(activities.map(a => a.id));
+                    const newCloudActivities = cloudActivities.filter(a => !localIds.has(a.id));
+                    activities = [...activities, ...newCloudActivities];
+                }
+            }
+            
+            // 加载当前活动
+            const { data: supabaseCurrent, error: currentError } = await supabase
+                .from('current_activities')
+                .select('*')
+                .eq('state', 'running')
+                .order('last_update', { ascending: false })
+                .limit(1);
+            
+            if (currentError) {
+                console.error('❌ 从 Supabase 加载当前活动失败:', currentError);
+            } else if (supabaseCurrent && supabaseCurrent.length > 0) {
+                console.log('✅ 从 Supabase 加载了当前活动');
+                
+                const cloudCurrent = supabaseCurrent[0];
+                if (!currentActivity) {
+                    currentActivity = {
+                        id: cloudCurrent.id,
+                        activityName: cloudCurrent.activity_name,
+                        startTime: new Date(cloudCurrent.start_time),
+                        endTime: null,
+                        duration: 0
+                    };
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ 从 Supabase 加载数据失败:', error);
+        }
     }
 }
 
