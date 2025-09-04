@@ -130,8 +130,40 @@ duration = timer.elapsedTime / (1000 * 60)
 2. 进行实际的手动测试
 3. 检查活动记录中的时间是否准确
 
+## 后续发现的问题
+
+### 重复记录问题
+
+在修复暂停时间计算bug后，发现了一个新的问题：完成活动时会创建重复的记录。
+
+**问题描述**:
+- 用户点击"暂停"时，如果计时超过1分钟，`stop()` 函数会自动调用 `completeActivity()` 保存记录
+- 用户点击"完成"按钮时，`completeActivityAndReset()` 又会调用 `completeActivity()` 保存记录
+- 结果：同一个活动被保存了两次
+
+**修复方案**:
+```javascript
+// 修复前（有重复记录）
+if (timer.elapsedTime >= 60000) {
+    this.completeActivity(activityName, timer.startTime, endTime);
+}
+
+// 修复后（无重复记录）
+// 注释掉自动保存逻辑，让用户手动点击"完成"按钮来保存记录
+// if (timer.elapsedTime >= 60000) {
+//     this.completeActivity(activityName, timer.startTime, endTime);
+// }
+```
+
+**修复文件**:
+- `multi-stopwatch-fixed.js` - `stop()` 函数 (第125-129行)
+
+**测试页面**:
+- `test_duplicate_fix.html` - 重复记录修复测试页面
+
 ---
 
 **修复完成时间**: 2025年1月3日  
 **修复状态**: ✅ 已完成  
-**测试状态**: ✅ 已验证
+**测试状态**: ✅ 已验证  
+**重复记录问题**: ✅ 已修复

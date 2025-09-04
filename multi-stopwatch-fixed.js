@@ -122,10 +122,11 @@ class MultiStopwatchManager {
             // 立即更新显示
             this.updateTimerCard(activityName);
             console.log(`✅ 活动 "${activityName}" 已停止，用时 ${Math.floor(timer.elapsedTime / 1000)} 秒`);
-            // 如果计时时间超过1分钟，保存为完成的活动记录
-            if (timer.elapsedTime >= 60000) {
-                this.completeActivity(activityName, timer.startTime, endTime);
-            }
+            // *** 修复：不在stop函数中自动保存记录，避免与complete按钮重复 ***
+            // 注释掉自动保存逻辑，让用户手动点击"完成"按钮来保存记录
+            // if (timer.elapsedTime >= 60000) {
+            //     this.completeActivity(activityName, timer.startTime, endTime);
+            // }
             // 延迟更新主界面UI，确保状态已保存
             setTimeout(() => {
                 this.updateMainPageUI();

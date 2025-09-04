@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重复记录修复测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        .log {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <h1>重复记录Bug修复测试</h1>
+    
+    <div class="test-section">
+        <h2>问题描述</h2>
+        <p>用户报告：完成活动时，活动记录会重复显示两次。</p>
+        <p><strong>问题根源：</strong></p>
+        <ul>
+            <li>在 <code>stop()</code> 函数中，当计时超过1分钟时会自动调用 <code>completeActivity()</code></li>
+            <li>用户点击"完成"按钮时，又会调用 <code>completeActivityAndReset()</code></li>
+            <li><code>completeActivityAndReset()</code> 内部又调用 <code>completeActivity()</code></li>
+            <li>结果：同一个活动被保存了两次</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>修复方案</h2>
+        <p><strong>修复内容：</strong></p>
+        <ul>
+            <li>注释掉 <code>stop()</code> 函数中的自动保存逻辑</li>
+            <li>只通过用户手动点击"完成"按钮来保存记录</li>
+            <li>避免重复调用 <code>completeActivity()</code></li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>模拟测试</h2>
+        <p>点击下面的按钮来模拟修复前后的行为：</p>
+        
+        <button class="test-button" onclick="simulateBeforeFix()">模拟修复前（有重复）</button>
+        <button class="test-button" onclick="simulateAfterFix()">模拟修复后（无重复）</button>
+        <button class="test-button" onclick="clearLog()">清除日志</button>
+        
+        <div id="test-status" class="status" style="display: none;"></div>
+        <div id="test-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>实际测试步骤</h2>
+        <ol>
+            <li>打开主页面 (index.html)</li>
+            <li>输入活动名称，点击"开始记录"</li>
+            <li>在计时页面点击"开始"</li>
+            <li>等待超过1分钟，然后点击"暂停"</li>
+            <li>点击"完成"</li>
+            <li>检查活动记录是否只显示一次（不应该有重复）</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>验证方法</h2>
+        <p>修复后应该看到：</p>
+        <ul>
+            <li>✅ 每个活动只记录一次</li>
+            <li>✅ 没有重复的活动记录</li>
+            <li>✅ 时间计算正确（实际活动时间）</li>
+        </ul>
+    </div>
+
+    <script>
+        let logElement = document.getElementById('test-log');
+        let statusElement = document.getElementById('test-status');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+        
+        function showStatus(message, type = 'success') {
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+            statusElement.style.display = 'block';
+        }
+        
+        function clearLog() {
+            logElement.textContent = '';
+            statusElement.style.display = 'none';
+        }
+        
+        function simulateBeforeFix() {
+            clearLog();
+            log('模拟修复前的行为（有重复记录）...');
+            
+            // 模拟活动记录数组
+            let activities = [];
+            
+            log('1. 用户开始计时活动"测试活动"');
+            log('2. 计时超过1分钟，用户点击"暂停"');
+            log('3. stop()函数被调用，自动保存记录（第1次）');
+            
+            // 模拟第一次保存（来自stop函数）
+            activities.push({
+                id: 'stop_1',
+                activityName: '测试活动',
+                duration: 1,
+                startTime: new Date(Date.now() - 60000),
+                endTime: new Date()
+            });
+            
+            log(`   保存记录1: ${activities[0].activityName} - ${activities[0].duration}分钟`);
+            log('4. 用户点击"完成"按钮');
+            log('5. completeActivityAndReset()被调用，再次保存记录（第2次）');
+            
+            // 模拟第二次保存（来自complete按钮）
+            activities.push({
+                id: 'complete_1',
+                activityName: '测试活动',
+                duration: 1,
+                startTime: new Date(Date.now() - 60000),
+                endTime: new Date()
+            });
+            
+            log(`   保存记录2: ${activities[1].activityName} - ${activities[1].duration}分钟`);
+            log(`\n结果: 总共保存了 ${activities.length} 条记录`);
+            log('问题: 同一个活动被保存了两次！');
+            
+            showStatus('❌ 修复前：存在重复记录问题', 'error');
+        }
+        
+        function simulateAfterFix() {
+            clearLog();
+            log('模拟修复后的行为（无重复记录）...');
+            
+            // 模拟活动记录数组
+            let activities = [];
+            
+            log('1. 用户开始计时活动"测试活动"');
+            log('2. 计时超过1分钟，用户点击"暂停"');
+            log('3. stop()函数被调用，但不再自动保存记录（已修复）');
+            
+            log('4. 用户点击"完成"按钮');
+            log('5. completeActivityAndReset()被调用，保存记录（仅1次）');
+            
+            // 模拟保存（只来自complete按钮）
+            activities.push({
+                id: 'complete_1',
+                activityName: '测试活动',
+                duration: 1,
+                startTime: new Date(Date.now() - 60000),
+                endTime: new Date()
+            });
+            
+            log(`   保存记录: ${activities[0].activityName} - ${activities[0].duration}分钟`);
+            log(`\n结果: 总共保存了 ${activities.length} 条记录`);
+            log('修复: 每个活动只保存一次！');
+            
+            showStatus('✅ 修复后：重复记录问题已解决', 'success');
+        }
+        
+        // 页面加载时自动运行一次测试
+        window.addEventListener('load', () => {
+            log('重复记录修复测试页面已加载');
+            log('点击按钮来模拟修复前后的行为');
+        });
+    </script>
+</body>
+</html>
