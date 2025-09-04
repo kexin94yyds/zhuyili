@@ -77,8 +77,13 @@
                     <div class="dropdown-arrow">▼</div>
                 </div>
                 <div class="dropdown-menu" id="user-dropdown-menu">
+                    <div class="dropdown-item" id="import-btn">
+                        <span>导入数据</span>
+                    </div>
+                    <div class="dropdown-item" id="export-btn">
+                        <span>导出数据</span>
+                    </div>
                     <div class="dropdown-item" id="logout-btn">
-                        <span class="logout-icon">🚪</span>
                         <span>登出</span>
                     </div>
                 </div>
@@ -87,10 +92,8 @@
             <!-- 中间：应用标题 -->
             <h1>Attention—Span—Tracker</h1>
             
-            <!-- 右侧：控制按钮 -->
-            <div class="header-controls">
-                <button id="export-btn" class="btn utility-btn">导出数据</button>
-                <button id="import-btn" class="btn utility-btn">导入数据</button>
+            <!-- 右侧：预留空间，让标题居中显示 -->
+            <div class="header-controls" style="display: none;">
                 <!-- 同步状态和时间显示已隐藏，但逻辑保留 -->
                 <div id="sync-status" class="sync-status" style="display: none;">🔄 同步中...</div>
                 <div id="current-time" class="current-time" style="display: none;"></div>

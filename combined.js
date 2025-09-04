@@ -222,6 +222,8 @@ function initUserDropdown() {
     const userAvatarContainer = document.getElementById('user-avatar-container');
     const userDropdown = document.querySelector('.user-dropdown');
     const logoutBtn = document.getElementById('logout-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const importBtn = document.getElementById('import-btn');
     
     if (userAvatarContainer && userDropdown) {
         // 点击头像容器切换下拉菜单
@@ -235,6 +237,30 @@ function initUserDropdown() {
             logoutBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 logout();
+                userDropdown.classList.remove('active');
+            });
+        }
+        
+        // 点击导出按钮
+        if (exportBtn) {
+            exportBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // 调用导出功能
+                if (typeof exportData === 'function') {
+                    exportData();
+                }
+                userDropdown.classList.remove('active');
+            });
+        }
+        
+        // 点击导入按钮
+        if (importBtn) {
+            importBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // 调用导入功能
+                if (typeof importData === 'function') {
+                    importData();
+                }
                 userDropdown.classList.remove('active');
             });
         }

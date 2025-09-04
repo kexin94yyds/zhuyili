@@ -160,7 +160,7 @@ h1 {
         0 0 20px rgba(240, 240, 240, 0.2),
         0 0 30px rgba(240, 240, 240, 0.1);
     position: absolute;
-    left: 45%;
+    left: 50%;
     transform: translateX(-50%);
     opacity: 0.95;
     animation: subtle-glow 1.5s ease-in-out infinite alternate;
