@@ -236,13 +236,13 @@
     <script src="supabaseClient.js"></script>
 
     <script>
-        let supabase = null;
+        let loginSupabase = null;
         
         // 初始化 Supabase 客户端
         function initSupabase() {
             try {
                 if (window.supabaseClient && window.supabaseClient.init()) {
-                    supabase = window.supabaseClient.getClient();
+                    loginSupabase = window.supabaseClient.getClient();
                     console.log('✅ 登录页面: Supabase 客户端初始化成功');
                 } else {
                     console.error('❌ 登录页面: Supabase 客户端初始化失败');
@@ -283,7 +283,7 @@
         
         // Google 登录
         async function signInWithGoogle() {
-            if (!supabase) {
+            if (!loginSupabase) {
                 showError('系统未初始化，请刷新页面重试');
                 return;
             }
@@ -291,7 +291,7 @@
             showLoading();
             
             try {
-                const { data, error } = await supabase.auth.signInWithOAuth({
+                const { data, error } = await loginSupabase.auth.signInWithOAuth({
                     provider: 'google',
                     options: {
                         redirectTo: `${window.location.origin}/index.html`
@@ -318,7 +318,7 @@
             const email = prompt('请输入您的邮箱地址:');
             if (!email) return;
             
-            if (!supabase) {
+            if (!loginSupabase) {
                 showError('系统未初始化，请刷新页面重试');
                 return;
             }
@@ -326,7 +326,7 @@
             showLoading();
             
             try {
-                const { data, error } = await supabase.auth.signInWithOtp({
+                const { data, error } = await loginSupabase.auth.signInWithOtp({
                     email: email,
                     options: {
                         emailRedirectTo: `${window.location.origin}/index.html`
@@ -350,10 +350,10 @@
         
         // 检查是否已经登录
         async function checkAuth() {
-            if (!supabase) return;
+            if (!loginSupabase) return;
             
             try {
-                const { data: { session } } = await supabase.auth.getSession();
+                const { data: { session } } = await loginSupabase.auth.getSession();
                 if (session) {
                     console.log('用户已登录，跳转到主页面');
                     window.location.href = 'index.html';
