@@ -528,6 +528,13 @@ class MultiStopwatchManager {
     handleButtonAction(action, timer) {
         console.log(`🔘 主界面按钮操作: ${action} - ${timer.name}`);
         
+        // 禁用所有相关按钮，防止重复点击
+        const card = document.querySelector(`.timer-card[data-activity="${timer.name}"]`);
+        if (card) {
+            const buttons = card.querySelectorAll('.timer-btn');
+            buttons.forEach(btn => btn.disabled = true);
+        }
+        
         switch (action) {
             case 'start':
                 this.start(timer.name);
@@ -568,12 +575,19 @@ class MultiStopwatchManager {
                 break;
         }
         
-        // 强制更新UI显示，确保状态同步
+        // 延迟重新启用按钮和更新UI，确保状态稳定
         setTimeout(() => {
             this.startRealTimeUpdate(); // 重新检查所有更新循环
             this.updateMainPageUI();
+            
+            // 重新启用按钮
+            if (card) {
+                const buttons = card.querySelectorAll('.timer-btn');
+                buttons.forEach(btn => btn.disabled = false);
+            }
+            
             console.log(`✅ 主界面操作"${action}"完成，UI已更新`);
-        }, 100);
+        }, 300); // 增加延迟时间，确保状态稳定
     }
 
     // 显示通知
@@ -672,8 +686,31 @@ class MultiStopwatchManager {
         const currentStatusClass = this.getStatusClass(timer);
         const cardStatusClass = card.className.split(' ').find(cls => ['running', 'paused', 'stopped'].includes(cls));
         
+        // 添加防抖机制，避免频繁状态切换
+        const cardActivityName = card.dataset.activity;
+        const lastUpdateKey = `lastUpdate_${cardActivityName}`;
+        const now = Date.now();
+        
+        if (!this[lastUpdateKey]) {
+            this[lastUpdateKey] = 0;
+        }
+        
+        // 如果距离上次更新不足200ms，且不是从运行状态变为停止状态，则跳过更新
+        if (now - this[lastUpdateKey] < 200 && !(cardStatusClass === 'running' && currentStatusClass !== 'running')) {
+            // 只更新时间，不更新状态和按钮
+            if (!timer.isRunning && timer.elapsedTime > 0) {
+                const timeElement = card.querySelector('.timer-time');
+                if (timeElement) {
+                    timeElement.textContent = this.formatTime(timer.elapsedTime);
+                }
+            }
+            return;
+        }
+        
         if (currentStatusClass !== cardStatusClass) {
             // 状态发生变化，需要更新
+            this[lastUpdateKey] = now;
+            
             card.className = `timer-card ${currentStatusClass}`;
             
             const statusDot = card.querySelector('.status-dot');
@@ -689,8 +726,11 @@ class MultiStopwatchManager {
             // 只有状态变化时才更新按钮，避免频繁重新绑定事件
             const actionsContainer = card.querySelector('.timer-actions');
             if (actionsContainer) {
-                actionsContainer.innerHTML = this.getActionButtons(timer);
-                this.addButtonListeners(card, timer);
+                // 使用requestAnimationFrame延迟更新，避免闪烁
+                requestAnimationFrame(() => {
+                    actionsContainer.innerHTML = this.getActionButtons(timer);
+                    this.addButtonListeners(card, timer);
+                });
             }
         } else {
             // 状态没有变化，只更新状态文本（不重新绑定按钮事件）

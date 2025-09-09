@@ -40,4 +40,9 @@ build/
 
 # 缓存文件
 .cache/
-.npm/ 
+.npm/
+
+# 用户数据文件
+current_activity.json
+time_tracker_data.json
+attention_tracker_*.json 
