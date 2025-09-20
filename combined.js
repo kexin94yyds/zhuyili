@@ -132,9 +132,14 @@ function initApp() {
     // 初始化用户下拉菜单
     initUserDropdown();
     
-    // 初始化多计时器管理器
+    // 初始化多计时器管理器（避免重复实例化）
     if (typeof MultiStopwatchManager !== 'undefined') {
-        window.multiStopwatchManager = new MultiStopwatchManager();
+        if (!window.multiStopwatchManager) {
+            window.multiStopwatchManager = new MultiStopwatchManager();
+            console.log('🆕 Created MultiStopwatchManager instance (combined.js)');
+        } else {
+            console.log('♻️ Reusing existing MultiStopwatchManager instance');
+        }
     }
     
     // 从本地存储和云端加载数据

@@ -15,6 +15,8 @@ class MultiStopwatchManager {
                 console.log(`[${this.__debug.tag}]`, ...args);
             } catch (_) {}
         };
+        // 简单的动作护栏，防止DOM切换期间的误触
+        this.__actionGuardUntil = 0;
         // (debug-only) no behavior switches here
         // --- end debug ---
         this.timers = new Map(); // 存储所有活动的计时器
@@ -569,7 +571,12 @@ class MultiStopwatchManager {
         
         buttons.forEach(button => {
             button.addEventListener('click', (e) => {
+                e.preventDefault();
                 e.stopPropagation();
+                if (Date.now() < this.__actionGuardUntil) {
+                    this.__d('click ignored by guard', { activity: timer.name });
+                    return;
+                }
                 
                 const action = button.dataset.action;
                 console.log(`按钮点击 - 活动: "${timer.name}", 操作: "${action}"`);
@@ -583,6 +590,8 @@ class MultiStopwatchManager {
     handleButtonAction(action, timer) {
         console.log(`🔘 主界面按钮操作: ${action} - ${timer.name}`);
         this.__d('handleButtonAction()', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: timer.isRunning, elapsed: timer.elapsedTime });
+        // 在按钮操作期间短暂开启护栏，防止DOM重绘引发的误点击
+        this.__actionGuardUntil = Date.now() + 400;
         
         // 禁用所有相关按钮，防止重复点击
         const card = document.querySelector(`.timer-card[data-activity="${timer.name}"]`);
@@ -806,6 +815,9 @@ class MultiStopwatchManager {
                     this.__d('Re-render actions', { activityName, status: currentStatusClass });
                     actionsContainer.innerHTML = this.getActionButtons(timer);
                     this.addButtonListeners(card, timer);
+                    // DOM切换后短时间禁用点击，避免一次点击被新按钮吞掉
+                    actionsContainer.style.pointerEvents = 'none';
+                    setTimeout(() => { actionsContainer.style.pointerEvents = ''; }, 200);
                 });
             }
         } else {
@@ -1138,14 +1150,16 @@ class MultiStopwatchManager {
     }
 }
 
-// 全局实例
-let multiStopwatchManager = null;
-
-// 页面加载完成后初始化
+// 避免重复实例化：如果 combined.js 已经创建了实例，这里复用
+// 全局实例（仅在未存在时创建）
 document.addEventListener('DOMContentLoaded', () => {
-    // 延迟初始化，确保其他脚本已加载完成
     setTimeout(() => {
-        multiStopwatchManager = new MultiStopwatchManager();
+        if (!window.multiStopwatchManager) {
+            window.multiStopwatchManager = new MultiStopwatchManager();
+            console.log('🆕 Created MultiStopwatchManager instance (fixed.js)');
+        } else {
+            console.log('♻️ Reusing existing MultiStopwatchManager instance (from combined.js)');
+        }
     }, 100);
 });
 
