@@ -1,6 +1,22 @@
 // 多活动计时器管理器
 class MultiStopwatchManager {
     constructor() {
+        // --- Debug instrumentation ---
+        this.__debug = {
+            enabled: true,
+            tag: 'JITTER',
+            updateMainPageUICount: 0,
+            lastUpdateMainPageUITs: 0,
+            statusHistory: new Map(), // activity -> { last: 'running|paused|stopped', ts: number, flipsIn1s: number }
+        };
+        this.__d = (...args) => {
+            if (!this.__debug.enabled) return;
+            try {
+                console.log(`[${this.__debug.tag}]`, ...args);
+            } catch (_) {}
+        };
+        // (debug-only) no behavior switches here
+        // --- end debug ---
         this.timers = new Map(); // 存储所有活动的计时器
         this.updateIntervals = new Map(); // 存储更新间隔ID
         this.supabase = null; // Supabase 客户端
@@ -47,6 +63,7 @@ class MultiStopwatchManager {
     // 开始计时
     start(activityName) {
         console.log(`▶️ 开始计时活动: "${activityName}"`);
+        this.__d('start()', { activityName, intervalsBefore: this.updateIntervals.size });
         
         const timer = this.getTimer(activityName);
         if (!timer.isRunning) {
@@ -83,6 +100,7 @@ class MultiStopwatchManager {
             
             this.updateIntervals.set(activityName, intervalId);
             console.log(`⏱️ 已启动"${activityName}"的更新间隔`);
+            this.__d('start()', { activityName, intervalsAfter: this.updateIntervals.size });
             
             this.saveData();
             this.updateMainPageUI();
@@ -96,6 +114,7 @@ class MultiStopwatchManager {
     // 停止计时
     stop(activityName) {
         console.log(`⏸️ 尝试停止活动 "${activityName}"`);
+        this.__d('stop()', { activityName, intervalsBefore: this.updateIntervals.size });
         const timer = this.getTimer(activityName);
         if (timer.isRunning) {
             // 立即标记为非运行状态，防止状态不一致
@@ -109,6 +128,7 @@ class MultiStopwatchManager {
                 this.updateIntervals.delete(activityName);
                 console.log(`⏹️ 已清除"${activityName}"的更新间隔`);
             }
+            this.__d('stop() after clearInterval', { activityName, intervalsAfter: this.updateIntervals.size });
             
             // *** 关键修复：立即清除currentActivity记录 ***
             this.clearCurrentActivityRecord();
@@ -129,6 +149,7 @@ class MultiStopwatchManager {
             // }
             // 延迟更新主界面UI，确保状态已保存
             setTimeout(() => {
+                this.__d('stop() -> delayed updateMainPageUI(50ms)');
                 this.updateMainPageUI();
             }, 50);
         } else {
@@ -401,6 +422,18 @@ class MultiStopwatchManager {
     // 更新主页面UI
     updateMainPageUI() {
         console.log('MultiStopwatchManager: 正在更新主页面UI...');
+        // 节流，避免短时间内重复重建导致抖动
+        const nowTs = Date.now();
+        if (this.__lastUIUpdate && (nowTs - this.__lastUIUpdate) < 150) {
+            this.__d('updateMainPageUI() throttled', { sinceLastMs: nowTs - this.__lastUIUpdate });
+            return;
+        }
+        this.__lastUIUpdate = nowTs;
+        // Debug: count frequency and detect bursts
+        const delta = nowTs - (this.__debug.lastUpdateMainPageUITs || 0);
+        this.__debug.updateMainPageUICount++;
+        this.__debug.lastUpdateMainPageUITs = nowTs;
+        this.__d('updateMainPageUI()', { count: this.__debug.updateMainPageUICount, sinceLastMs: delta, intervals: this.updateIntervals.size });
         
         const timersContainer = document.getElementById('activity-timers');
         const noTimersElement = document.getElementById('no-timers');
@@ -429,6 +462,26 @@ class MultiStopwatchManager {
             noTimersElement.style.display = 'none';
         }
 
+        // 增量更新：保留已存在的卡片，只为新增活动创建卡片
+        const existingCards = new Map();
+        Array.from(timersContainer.querySelectorAll('.timer-card')).forEach(card => {
+            existingCards.set(card.dataset.activity, card);
+        });
+
+        const activitySet = new Set(activities);
+
+        activities.forEach(activityName => {
+            const timer = this.getTimer(activityName);
+            let card = existingCards.get(activityName);
+            if (!card) {
+                card = this.createTimerCard(timer);
+                timersContainer.appendChild(card);
+            } else {
+                // 就地更新状态与时间，不重建节点
+                this.updateTimerCard(activityName);
+            }
+        });
+
         // 清空现有内容（除了no-timers元素）
         Array.from(timersContainer.children).forEach(child => {
             if (child.id !== 'no-timers') {
@@ -452,6 +505,8 @@ class MultiStopwatchManager {
         const card = document.createElement('div');
         card.className = `timer-card ${this.getStatusClass(timer)}`;
         card.dataset.activity = timer.name;
+        card.dataset.createdAt = String(Date.now());
+        this.__d('createTimerCard()', { activityName: timer.name, status: this.getStatusClass(timer), createdAt: card.dataset.createdAt });
 
         const currentTime = this.getCurrentTime(timer.name);
 
@@ -527,6 +582,7 @@ class MultiStopwatchManager {
     // 处理按钮操作
     handleButtonAction(action, timer) {
         console.log(`🔘 主界面按钮操作: ${action} - ${timer.name}`);
+        this.__d('handleButtonAction()', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: timer.isRunning, elapsed: timer.elapsedTime });
         
         // 禁用所有相关按钮，防止重复点击
         const card = document.querySelector(`.timer-card[data-activity="${timer.name}"]`);
@@ -587,6 +643,7 @@ class MultiStopwatchManager {
             }
             
             console.log(`✅ 主界面操作"${action}"完成，UI已更新`);
+            this.__d('handleButtonAction() done', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: this.getTimer(timer.name)?.isRunning });
         }, 300); // 增加延迟时间，确保状态稳定
     }
 
@@ -625,6 +682,7 @@ class MultiStopwatchManager {
     // 启动实时更新
     startRealTimeUpdate() {
         console.log('🔄 检查并启动实时更新...');
+        this.__d('startRealTimeUpdate() clearing', { existingIntervals: Array.from(this.updateIntervals.keys()) });
         
         // 先清除所有现有的更新循环
         this.updateIntervals.forEach((intervalId, activityName) => {
@@ -666,6 +724,7 @@ class MultiStopwatchManager {
         });
         
         console.log(`✅ 实时更新检查完成，当前活跃间隔数: ${this.updateIntervals.size}`);
+        this.__d('startRealTimeUpdate() done', { activeIntervals: Array.from(this.updateIntervals.keys()) });
     }
 
     // 更新单个计时器卡片
@@ -710,6 +769,22 @@ class MultiStopwatchManager {
         if (currentStatusClass !== cardStatusClass) {
             // 状态发生变化，需要更新
             this[lastUpdateKey] = now;
+            // Debug: detect rapid flips
+            const hist = this.__debug.statusHistory.get(activityName) || { last: null, ts: 0, flipsIn1s: 0 };
+            if (hist.last && hist.last !== currentStatusClass) {
+                const within1s = now - (hist.ts || 0) <= 1000;
+                hist.flipsIn1s = within1s ? (hist.flipsIn1s + 1) : 1;
+            } else if (!hist.last) {
+                hist.flipsIn1s = 0;
+            }
+            hist.last = currentStatusClass;
+            hist.ts = now;
+            this.__debug.statusHistory.set(activityName, hist);
+            if (hist.flipsIn1s >= 2) {
+                this.__d('Oscillation detected', { activityName, flipsIn1s: hist.flipsIn1s, from: cardStatusClass, to: currentStatusClass });
+            } else {
+                this.__d('Status change', { activityName, from: cardStatusClass, to: currentStatusClass });
+            }
             
             card.className = `timer-card ${currentStatusClass}`;
             
@@ -728,6 +803,7 @@ class MultiStopwatchManager {
             if (actionsContainer) {
                 // 使用requestAnimationFrame延迟更新，避免闪烁
                 requestAnimationFrame(() => {
+                    this.__d('Re-render actions', { activityName, status: currentStatusClass });
                     actionsContainer.innerHTML = this.getActionButtons(timer);
                     this.addButtonListeners(card, timer);
                 });
@@ -752,10 +828,11 @@ class MultiStopwatchManager {
     // 保存数据到本地存储和 Supabase
     async saveData() {
         const data = {};
+        const now = Date.now();
         this.timers.forEach((timer, name) => {
-            data[name] = {
-                ...timer
-            };
+            // 标记本地最新更新时间，避免被较旧的云端状态覆盖
+            timer.lastUpdate = now;
+            data[name] = { ...timer };
         });
         localStorage.setItem('multiStopwatchData', JSON.stringify(data));
         
@@ -981,6 +1058,8 @@ class MultiStopwatchManager {
                         this.updateIntervals.set(name, intervalId);
                     }
                 });
+                const running = Array.from(this.timers.entries()).filter(([, t]) => t.isRunning).map(([n]) => n);
+                this.__d('loadData() summary', { timers: this.timers.size, running });
             } catch (error) {
                 console.error('加载本地数据失败:', error);
             }

@@ -777,8 +777,39 @@
             }
         }
 
-        // 返回主页
+        // 返回主页：先自动暂停（若在运行）再返回，避免主页抖动
         function goBack() {
+            try {
+                if (manager && currentActivity) {
+                    const timer = manager.getTimer(currentActivity);
+                    if (timer && timer.isRunning) {
+                        console.log('↩️ 返回主页前自动暂停: ', currentActivity);
+                        // 停止本页更新循环，避免干扰
+                        if (updateInterval) {
+                            clearInterval(updateInterval);
+                            updateInterval = null;
+                        }
+                        // 执行暂停并立即保存
+                        manager.stop(currentActivity);
+                        manager.saveData();
+                        // 触发storage通知，让主页立即拿到暂停后的状态
+                        setTimeout(() => {
+                            try {
+                                window.localStorage.setItem('multiStopwatchData_notify', Date.now().toString());
+                                window.localStorage.removeItem('multiStopwatchData_notify');
+                            } catch (e) {}
+                        }, 10);
+                        // 稍等片刻再跳转，确保状态传播
+                        setTimeout(() => {
+                            window.location.href = 'index.html';
+                        }, 180);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error('返回前自动暂停失败:', e);
+            }
+            // 若未在运行或出错，直接返回
             window.location.href = 'index.html';
         }
 
