@@ -59,14 +59,75 @@ function initPayment() {
     }
 }
 
+// 检查用户是否在白名单中（从 Supabase）
+async function checkWhitelist() {
+    try {
+        // 确保 Supabase 已初始化
+        if (!window.supabase) {
+            console.log('⚠️ Supabase 未初始化，跳过白名单检查');
+            return false;
+        }
+        
+        const { data: { user }, error } = await window.supabase.auth.getUser();
+        
+        if (error || !user || !user.email) {
+            console.log('⚠️ 用户未登录或无邮箱，跳过白名单检查');
+            return false;
+        }
+        
+        console.log('🔍 检查白名单用户:', user.email);
+        
+        // 查询白名单表
+        const { data: whitelistUser, error: queryError } = await window.supabase
+            .from('premium_users')
+            .select('*')
+            .eq('email', user.email)
+            .eq('is_active', true)
+            .single();
+        
+        if (queryError) {
+            if (queryError.code === 'PGRST116') {
+                // 没有找到记录，不是白名单用户
+                console.log('ℹ️ 用户不在白名单中');
+                return false;
+            }
+            console.error('❌ 白名单查询失败:', queryError);
+            return false;
+        }
+        
+        if (whitelistUser) {
+            console.log('✅ 白名单用户:', whitelistUser.display_name || user.email);
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('❌ 白名单检查异常:', error);
+        return false;
+    }
+}
+
 // 检查支付状态
-function checkPaymentStatus() {
-    const isPaid = localStorage.getItem('isPremiumUser') === 'true';
-    console.log('检查支付状态:', isPaid ? '已付费' : '未付费');
-    
-    if (isPaid) {
+async function checkPaymentStatus() {
+    // 1. 先检查是否是白名单用户
+    const isWhitelisted = await checkWhitelist();
+    if (isWhitelisted) {
+        console.log('🎁 白名单用户，自动解锁高级功能');
+        localStorage.setItem('isPremiumUser', 'true');
+        localStorage.setItem('premiumType', 'whitelist'); // 标记为白名单用户
         unlockPremiumFeatures();
-    } else {
+        return;
+    }
+    
+    // 2. 检查是否已购买
+    const isPaid = localStorage.getItem('isPremiumUser') === 'true';
+    const premiumType = localStorage.getItem('premiumType');
+    
+    console.log('检查支付状态:', isPaid ? '已付费' : '未付费', premiumType ? `(${premiumType})` : '');
+    
+    if (isPaid && premiumType !== 'whitelist') {
+        unlockPremiumFeatures();
+    } else if (!isPaid) {
         lockPremiumFeatures();
     }
 }
@@ -436,6 +497,7 @@ function startPaymentPolling(orderNo) {
                 
                 // 保存支付状态
                 localStorage.setItem('isPremiumUser', 'true');
+                localStorage.setItem('premiumType', 'paid'); // 标记为付费用户
                 localStorage.setItem('premiumOrderNo', orderNo);
                 localStorage.setItem('premiumActivatedAt', new Date().toISOString());
                 
@@ -489,4 +551,3 @@ if (document.readyState === 'loading') {
 } else {
     initPayment();
 }
-
