@@ -1,7 +1,7 @@
 // ==================== 微信支付功能 ====================
 
 const PAYMENT_CONFIG = {
-    API_URL: 'http://localhost:3003',
+    API_URL: 'https://wechat-y-server-vjfbztievl.cn-shanghai.fcapp.run',
     PRODUCT_INFO: {
         id: 'premium_access',
         name: 'Attention Span Tracker 完整版',
