@@ -152,10 +152,14 @@ function handleTrialClick(event) {
 
 // 添加试用点击监听
 function addTrialClickListeners() {
-    // 监听所有统计按钮
+    // 监听所有统计按钮，但排除购买按钮
     const statsButtons = document.querySelectorAll('.statistics button, .statistics .btn, #show-stats-btn, button[onclick*="showStats"]');
     
     statsButtons.forEach(button => {
+        // 排除购买按钮
+        if (button.id === 'premium-buy-btn') {
+            return;
+        }
         button.addEventListener('click', handleTrialClick, true);
     });
     
@@ -179,6 +183,16 @@ function lockPremiumFeatures() {
             messageText.textContent = '试用次数已用完，购买后永久使用所有高级功能';
             lockMessage.style.display = 'block';
         }
+    }
+    
+    // 绑定购买按钮事件（动态绑定，因为按钮可能是后来显示的）
+    const buyBtn = document.getElementById('premium-buy-btn');
+    if (buyBtn) {
+        // 移除旧的事件监听器（如果有）
+        buyBtn.removeEventListener('click', handlePurchaseClick);
+        // 添加新的事件监听器
+        buyBtn.addEventListener('click', handlePurchaseClick);
+        console.log('✅ 购买按钮事件已绑定');
     }
     
     // 锁定统计功能
