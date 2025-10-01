@@ -15,7 +15,7 @@ let currentOrderNo = null;
 let pollInterval = null;
 
 // 免费试用配置
-const FREE_TRIAL_LIMIT = 100; // 免费查看次数
+const FREE_TRIAL_LIMIT = 30; // 免费查看次数
 
 // 初始化支付功能
 function initPayment() {
