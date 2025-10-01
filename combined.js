@@ -280,26 +280,85 @@ function initUserDropdown() {
 }
 
 // 更新用户信息显示
-async function updateUserInfo() {
-    if (!supabase) return;
+// 生成默认头像SVG
+function generateDefaultAvatar(name) {
+    const firstChar = (name || '可').charAt(0).toUpperCase();
+    const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a'];
+    const colorIndex = firstChar.charCodeAt(0) % colors.length;
+    const bgColor = colors[colorIndex];
     
-    try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const userAvatarContainer = document.getElementById('user-avatar-container');
-        
-        if (user && userAvatarContainer) {
+    const svg = `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="16" fill="${bgColor}"/><text x="16" y="21" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="Arial, sans-serif">${firstChar}</text></svg>`;
+    
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+}
+
+async function updateUserInfo() {
+    const userAvatarContainer = document.getElementById('user-avatar-container');
             const userAvatar = document.getElementById('user-avatar');
             const userName = document.getElementById('user-name');
             
-            if (userAvatar && userName) {
-                // 显示用户头像
-                if (user.user_metadata?.avatar_url) {
-                    userAvatar.src = user.user_metadata.avatar_url;
-                } else if (user.user_metadata?.picture) {
-                    userAvatar.src = user.user_metadata.picture;
+    if (!userAvatarContainer || !userAvatar || !userName) {
+        console.warn('用户信息DOM元素未找到');
+        return;
+    }
+    
+    try {
+        // 如果Supabase未初始化，引导用户登录
+        if (!supabase) {
+            console.log('⚠️ Supabase未初始化，引导用户登录');
+            showLoginPrompt(userAvatar, userName, userAvatarContainer);
+            return;
+        }
+        
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error) {
+            console.error('❌ 获取用户信息失败:', error);
+            showLoginPrompt(userAvatar, userName, userAvatarContainer);
+            return;
+        }
+        
+        if (!user) {
+            // 用户未登录，引导登录
+            console.log('⚠️ 用户未登录，引导用户登录');
+            showLoginPrompt(userAvatar, userName, userAvatarContainer);
+            return;
+        }
+        
+        // 用户已登录 - 显示真实信息
+        console.log('✅ 用户已登录:', user.email);
+        console.log('📋 用户元数据:', user.user_metadata);
+        
+        // 获取Google头像 - 多种可能的字段
+        let avatarUrl = 
+            user.user_metadata?.avatar_url || 
+            user.user_metadata?.picture || 
+            user.user_metadata?.avatar ||
+            null;
+        
+        console.log('🖼️ 头像URL:', avatarUrl);
+        
+        if (avatarUrl) {
+            userAvatar.src = avatarUrl;
+            console.log('✅ 使用真实头像');
+            
+            // 添加错误处理
+            userAvatar.onerror = function() {
+                console.warn('⚠️ 头像加载失败，使用默认头像');
+                const displayName = user.user_metadata?.full_name || 
+                                  user.user_metadata?.name || 
+                                  user.email?.split('@')[0] || 
+                                  '用户';
+                this.src = generateDefaultAvatar(displayName);
+                this.onerror = null;
+            };
                 } else {
-                    // 如果没有头像，使用默认头像
-                    userAvatar.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM2NjYiLz4KPHN2ZyB4PSI4IiB5PSI4IiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSI+CjxjaXJjbGUgY3g9IjgiIGN5PSI2IiByPSIzIiBmaWxsPSIjZTBmMGYwIi8+CjxwYXRoIGQ9Ik0yIDE0QzIgMTEuNzkwOSAzLjc5MDg2IDEwIDYgMTBIMTBIMTBDMTIuMjA5MSAxMCAxNCAxMS43OTA5IDE0IDE0VjE0SDJWMTQiIGZpbGw9IiNlMGYwZjAiLz4KPC9zdmc+Cjwvc3ZnPgo=';
+            console.log('ℹ️ 没有头像URL，生成默认头像');
+            const displayName = user.user_metadata?.full_name || 
+                              user.user_metadata?.name || 
+                              user.email?.split('@')[0] || 
+                              '用户';
+            userAvatar.src = generateDefaultAvatar(displayName);
                 }
                 
                 // 显示用户名字
@@ -312,17 +371,26 @@ async function updateUserInfo() {
                 // 显示用户信息容器
                 userAvatarContainer.style.display = 'flex';
                 
-                console.log('✅ 用户信息已更新:', displayName);
-            }
-        } else {
-            // 隐藏用户信息容器
-            if (userAvatarContainer) {
-                userAvatarContainer.style.display = 'none';
-            }
-        }
+        console.log('✅ 用户信息已更新 - 姓名:', displayName);
+        
     } catch (error) {
-        console.error('❌ 获取用户信息失败:', error);
+        console.error('❌ 更新用户信息异常:', error);
+        showLoginPrompt(userAvatar, userName, userAvatarContainer);
     }
+}
+
+// 显示登录提示
+function showLoginPrompt(userAvatar, userName, userAvatarContainer) {
+    userAvatar.src = generateDefaultAvatar('游客');
+    userName.textContent = '点击登录';
+    userAvatarContainer.style.display = 'flex';
+    userAvatarContainer.style.cursor = 'pointer';
+    
+    // 添加点击事件，跳转到登录页面
+    userAvatarContainer.onclick = function() {
+        console.log('用户点击登录');
+        window.location.href = 'login.html';
+    };
 }
 
 // 更新当前时间显示
