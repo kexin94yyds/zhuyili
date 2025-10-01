@@ -63,12 +63,13 @@ function initPayment() {
 async function checkWhitelist() {
     try {
         // 确保 Supabase 已初始化
-        if (!window.supabase) {
+        const supabase = window.supabaseClient?.getClient();
+        if (!supabase) {
             console.log('⚠️ Supabase 未初始化，跳过白名单检查');
             return false;
         }
         
-        const { data: { user }, error } = await window.supabase.auth.getUser();
+        const { data: { user }, error } = await supabase.auth.getUser();
         
         if (error || !user || !user.email) {
             console.log('⚠️ 用户未登录或无邮箱，跳过白名单检查');
@@ -78,7 +79,7 @@ async function checkWhitelist() {
         console.log('🔍 检查白名单用户:', user.email);
         
         // 查询白名单表
-        const { data: whitelistUser, error: queryError } = await window.supabase
+        const { data: whitelistUser, error: queryError } = await supabase
             .from('premium_users')
             .select('*')
             .eq('email', user.email)
