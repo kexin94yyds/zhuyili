@@ -1,0 +1,39 @@
+# Netlify配置文件
+[build]
+  publish = "."
+  command = "echo 'Static site build complete'"
+
+# 环境变量（在Netlify后台设置）
+[build.environment]
+  NODE_VERSION = "18"
+
+# 重定向规则
+[[redirects]]
+  from = "/api/*"
+  to = "https://your-payment-server.com/api/:splat"
+  status = 200
+  force = true
+  
+# SPA路由支持（如果需要）
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# 安全头部
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# 允许CORS（用于API调用）
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
+

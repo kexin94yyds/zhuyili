@@ -10,6 +10,9 @@
 - **年度统计表**: 全年活动数据的热力图展示
 - **数据管理**: 导入/导出功能，支持数据备份
 - **PWA应用**: 支持离线使用和桌面安装
+- **💳 微信支付**: 集成Native支付，支持二维码扫码购买
+- **🎁 免费试用**: 2次免费体验高级功能
+- **👤 Google登录**: 支持Google账号登录和头像显示
 
 ## 🎨 界面特色
 
@@ -36,6 +39,43 @@
 - Chart.js (图表库)
 - Service Worker (PWA支持)
 - LocalStorage (数据持久化)
+- Supabase (云端数据库和用户认证)
+- 微信支付SDK (Native支付)
+- QRCode.js (二维码生成)
+
+## 🌐 在线访问
+
+- **生产环境**: [https://attention-span-tracker.netlify.app](https://attention-span-tracker.netlify.app)
+- **GitHub仓库**: [https://github.com/kexin94yyds/zhuyili](https://github.com/kexin94yyds/zhuyili)
+- **Netlify管理**: [https://app.netlify.com/projects/attention-span-tracker](https://app.netlify.com/projects/attention-span-tracker)
+
+## 📦 部署
+
+### 自动部署（推荐）
+项目已配置自动部署，推送到GitHub后会自动触发Netlify部署。
+
+```bash
+git add .
+git commit -m "更新内容"
+git push origin main
+```
+
+### 本地开发
+```bash
+# 1. 克隆项目
+git clone https://github.com/kexin94yyds/zhuyili.git
+
+# 2. 打开项目
+cd zhuyili
+
+# 3. 使用本地服务器运行
+python -m http.server 8000
+# 或
+npx serve .
+```
+
+### 支付服务器部署
+详见 [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) 和 [PAYMENT_GUIDE.md](./PAYMENT_GUIDE.md)
 
 ## 📄 许可证
 
