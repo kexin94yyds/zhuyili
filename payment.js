@@ -254,9 +254,10 @@ async function createPaymentOrder() {
         const result = await response.json();
         console.log('支付订单创建结果:', result);
         
-        if (result.success && result.codeUrl) {
+        // API返回的字段名是 code_url (下划线格式)
+        if (result.success && result.code_url) {
             currentOrderNo = result.orderNo;
-            showPaymentModal(result.codeUrl, result.orderNo);
+            showPaymentModal(result.code_url, result.orderNo);
             startPaymentPolling(result.orderNo);
         } else {
             alert('支付订单创建失败: ' + (result.message || '未知错误'));
