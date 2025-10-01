@@ -290,8 +290,13 @@
             
             showLoading();
             
-            // 根据当前环境选择重定向URL（自动适配当前域名，避免硬编码404）
-            const redirectUrl = `${window.location.protocol}//${window.location.host}/index.html`;
+            // 根据环境选择重定向URL
+            // 本地开发：回到本地index.html；
+            // 生产部署：统一回到Netlify正式域名，避免误跳到本地3000导致“Cannot GET /”。
+            const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+            const redirectUrl = isLocal
+                ? `${window.location.protocol}//${window.location.host}/index.html`
+                : `https://attention-span-tracker.netlify.app/index.html`;
             
             try {
                 const { data, error } = await loginSupabase.auth.signInWithOAuth({
