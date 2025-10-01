@@ -290,11 +290,8 @@
             
             showLoading();
             
-            // 根据当前环境选择重定向URL
-            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            const redirectUrl = isLocal ? 
-                `${window.location.protocol}//${window.location.host}/index.html` : 
-                'https://zhuyili.netlify.app/index.html';
+            // 根据当前环境选择重定向URL（自动适配当前域名，避免硬编码404）
+            const redirectUrl = `${window.location.protocol}//${window.location.host}/index.html`;
             
             try {
                 const { data, error } = await loginSupabase.auth.signInWithOAuth({
