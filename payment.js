@@ -90,6 +90,78 @@ function getRemainingTrials() {
     return Math.max(0, FREE_TRIAL_LIMIT - trialCount);
 }
 
+// 显示试用提示
+function showTrialNotification(message) {
+    // 创建通知元素
+    const notification = document.createElement('div');
+    notification.className = 'trial-notification';
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: #4A90E2;
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        animation: slideInRight 0.3s ease;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // 3秒后自动移除
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// 处理试用点击
+function handleTrialClick(event) {
+    const isPaid = localStorage.getItem('isPremiumUser') === 'true';
+    
+    if (isPaid) {
+        return; // 已付费用户直接通过
+    }
+    
+    const hasTrials = checkTrialUsage();
+    
+    if (hasTrials) {
+        // 还有试用次数
+        incrementTrialUsage();
+        const remaining = getRemainingTrials();
+        showTrialNotification(`💡 还剩 ${remaining} 次免费查看机会`);
+        
+        if (remaining === 0) {
+            // 试用次数用完，锁定功能
+            setTimeout(() => {
+                lockPremiumFeatures();
+                showTrialNotification('🔒 试用次数已用完，请购买完整版');
+            }, 1000);
+        }
+    } else {
+        // 没有试用次数了
+        event.preventDefault();
+        event.stopPropagation();
+        lockPremiumFeatures();
+        showTrialNotification('🔒 试用次数已用完，请购买完整版');
+    }
+}
+
+// 添加试用点击监听
+function addTrialClickListeners() {
+    // 监听所有统计按钮
+    const statsButtons = document.querySelectorAll('.statistics button, .statistics .btn, #show-stats-btn, button[onclick*="showStats"]');
+    
+    statsButtons.forEach(button => {
+        button.addEventListener('click', handleTrialClick, true);
+    });
+    
+    console.log(`已添加 ${statsButtons.length} 个试用点击监听器`);
+}
+
 // 锁定高级功能
 function lockPremiumFeatures() {
     console.log('锁定高级功能');
