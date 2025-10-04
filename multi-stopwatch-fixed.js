@@ -971,7 +971,10 @@ class MultiStopwatchManager {
     }
 
     // 完成活动时添加到统计记录
-    completeActivity(activityName, startTime, endTime) {
+    async completeActivity(activityName, startTime, endTime) {
+        console.log(`\n💾 ========== 保存活动记录 ==========`);
+        console.log(`📌 活动: "${activityName}"`);
+        
         let completedActivities = [];
         
         // 获取现有记录
@@ -1005,13 +1008,83 @@ class MultiStopwatchManager {
 
         completedActivities.unshift(activityRecord);
         
-        // 保存更新后的记录
+        // 保存更新后的记录到本地
         localStorage.setItem('timeTrackerActivities', JSON.stringify(completedActivities));
+        console.log(`✅ 已保存到本地存储 (持续 ${activityRecord.duration} 分钟)`);
         
         // 更新兼容数据
         this.saveCompatibleData();
 
-        console.log(`MultiStopwatchManager: 活动记录已保存 - ${activityName}, 实际持续 ${activityRecord.duration} 分钟 (修复了暂停时间计算bug)`);
+        // *** 核心修复：同步活动记录到 Supabase ***
+        if (this.supabase) {
+            try {
+                console.log(`☁️ 开始同步活动记录到云端...`);
+                
+                // 获取当前用户
+                const { data: { user } } = await this.supabase.auth.getUser();
+                if (!user) {
+                    console.warn('⚠️ 用户未登录，活动记录不会同步到云端');
+                    console.log(`========== 活动记录保存结束 (仅本地) ==========\n`);
+                    return;
+                }
+                
+                console.log(`👤 当前用户: ${user.email}`);
+                
+                // 保存到 activities 表
+                const { error } = await this.supabase
+                    .from('activities')
+                    .upsert({
+                        id: activityRecord.id,
+                        user_id: user.id,
+                        activity_name: activityRecord.activityName,
+                        start_time: actualStartTime.toISOString(),
+                        end_time: actualEndTime.toISOString(),
+                        duration_minutes: activityRecord.duration,
+                        note: '',
+                        color: this.getColorForActivity(activityRecord.activityName),
+                        created_at: actualStartTime.toISOString(),
+                        updated_at: new Date().toISOString()
+                    }, {
+                        onConflict: 'id'
+                    });
+                
+                if (error) {
+                    console.error('❌ 保存活动记录到云端失败:', error);
+                } else {
+                    console.log(`✅ 活动记录已同步到云端！`);
+                    console.log(`📢 其他设备刷新后将看到这条记录`);
+                }
+                
+            } catch (error) {
+                console.error('❌ 云端同步异常:', error);
+            }
+        } else {
+            console.warn('⚠️ Supabase 未初始化，活动记录不会同步到云端');
+        }
+        
+        console.log(`========== 活动记录保存结束 ==========\n`);
+    }
+    
+    // 根据活动名称生成颜色
+    getColorForActivity(activityName) {
+        // 简单的哈希函数生成颜色
+        let hash = 0;
+        for (let i = 0; i < activityName.length; i++) {
+            hash = activityName.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        
+        const colors = [
+            '#3498db', // 蓝色
+            '#2ecc71', // 绿色
+            '#e74c3c', // 红色
+            '#f39c12', // 橙色
+            '#9b59b6', // 紫色
+            '#1abc9c', // 青色
+            '#d35400', // 深橙色
+            '#2c3e50'  // 深蓝色
+        ];
+        
+        return colors[Math.abs(hash) % colors.length];
     }
 
     // 完成活动并重置计时器
