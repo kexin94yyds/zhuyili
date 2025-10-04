@@ -723,6 +723,9 @@ async function saveData() {
 
 // 从本地存储和 Supabase 加载数据
 async function loadData() {
+    console.log('\n📂 ========== 开始加载活动记录 ==========');
+    console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+    
     // 首先从本地存储加载
     const dataString = localStorage.getItem('timeTrackerData');
     
@@ -737,6 +740,8 @@ async function loadData() {
                 endTime: activity.endTime ? new Date(activity.endTime) : null
             }));
             
+            console.log(`📦 从本地加载了 ${activities.length} 条活动记录`);
+            
             if (data.currentActivity) {
                 currentActivity = {
                     ...data.currentActivity,
@@ -745,23 +750,36 @@ async function loadData() {
                 };
             }
         } catch (error) {
-            console.error('加载本地数据失败:', error);
+            console.error('❌ 加载本地数据失败:', error);
             activities = [];
             currentActivity = null;
         }
+    } else {
+        console.log('⚠️ 本地没有活动记录数据');
+    }
+    
+    // 检查 Supabase 连接状态
+    console.log('🔍 检查 Supabase 连接状态...');
+    console.log(`  - supabase 对象: ${supabase ? '✅ 存在' : '❌ 不存在'}`);
+    console.log(`  - window.supabaseClient: ${window.supabaseClient ? '✅ 存在' : '❌ 不存在'}`);
+    if (window.supabaseClient) {
+        console.log(`  - isConnected(): ${window.supabaseClient.isConnected ? window.supabaseClient.isConnected() : '❌ 方法不存在'}`);
     }
     
     // 如果 Supabase 连接成功，尝试从云端加载最新数据
     if (supabase && window.supabaseClient && window.supabaseClient.isConnected()) {
         try {
-            console.log('🔄 正在从 Supabase 加载数据...');
+            console.log('☁️ 开始从 Supabase 加载活动记录...');
             
             // 获取当前用户
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                console.warn('用户未登录，跳过云端数据加载');
+                console.warn('⚠️ 用户未登录，跳过云端数据加载');
+                console.log('========== 活动记录加载结束 (仅本地) ==========\n');
                 return;
             }
+            
+            console.log(`👤 当前用户: ${user.email}`);
             
             // 加载活动记录（只加载当前用户的数据）
             const { data: supabaseActivities, error: activitiesError } = await supabase
@@ -773,29 +791,43 @@ async function loadData() {
             if (activitiesError) {
                 console.error('❌ 从 Supabase 加载活动记录失败:', activitiesError);
                 updateSyncStatus('error', '❌ 加载失败');
-            } else if (supabaseActivities && supabaseActivities.length > 0) {
-                console.log(`✅ 从 Supabase 加载了 ${supabaseActivities.length} 条活动记录`);
-                updateSyncStatus('success', `✅ 已加载 ${supabaseActivities.length} 条记录`);
+            } else {
+                console.log(`☁️ 从云端查询到 ${supabaseActivities ? supabaseActivities.length : 0} 条活动记录`);
                 
-                // 转换数据格式
-                const cloudActivities = supabaseActivities.map(activity => ({
-                    id: activity.id,
-                    activityName: activity.activity_name,
-                    startTime: new Date(activity.start_time),
-                    endTime: activity.end_time ? new Date(activity.end_time) : null,
-                    duration: activity.duration_minutes || 0,
-                    note: activity.note || '',
-                    color: activity.color || getColorForActivity(activity.activity_name)
-                }));
-                
-                // 合并数据（云端数据优先）
-                if (activities.length === 0) {
-                    activities = cloudActivities;
+                if (supabaseActivities && supabaseActivities.length > 0) {
+                    console.log(`✅ 开始合并云端数据...`);
+                    updateSyncStatus('success', `✅ 已加载 ${supabaseActivities.length} 条记录`);
+                    
+                    // 转换数据格式
+                    const cloudActivities = supabaseActivities.map(activity => ({
+                        id: activity.id,
+                        activityName: activity.activity_name,
+                        startTime: new Date(activity.start_time),
+                        endTime: activity.end_time ? new Date(activity.end_time) : null,
+                        duration: activity.duration_minutes || 0,
+                        note: activity.note || '',
+                        color: activity.color || getColorForActivity(activity.activity_name)
+                    }));
+                    
+                    console.log(`📋 云端活动记录列表:`);
+                    cloudActivities.forEach((act, idx) => {
+                        console.log(`  ${idx + 1}. ${act.activityName} - ${act.duration}分钟 (${act.startTime.toLocaleString('zh-CN')})`);
+                    });
+                    
+                    // 合并数据（云端数据优先）
+                    const beforeLength = activities.length;
+                    if (activities.length === 0) {
+                        activities = cloudActivities;
+                        console.log(`✅ 本地无数据，直接使用云端数据 (${cloudActivities.length}条)`);
+                    } else {
+                        // 简单的合并策略：保留本地数据，添加云端新数据
+                        const localIds = new Set(activities.map(a => a.id));
+                        const newCloudActivities = cloudActivities.filter(a => !localIds.has(a.id));
+                        activities = [...activities, ...newCloudActivities];
+                        console.log(`✅ 合并完成: 本地${beforeLength}条 + 云端新增${newCloudActivities.length}条 = 总计${activities.length}条`);
+                    }
                 } else {
-                    // 简单的合并策略：保留本地数据，添加云端新数据
-                    const localIds = new Set(activities.map(a => a.id));
-                    const newCloudActivities = cloudActivities.filter(a => !localIds.has(a.id));
-                    activities = [...activities, ...newCloudActivities];
+                    console.log('☁️ 云端没有活动记录');
                 }
             }
             
@@ -825,10 +857,25 @@ async function loadData() {
                 }
             }
             
+            console.log(`✅ 云端数据加载完成`);
+            console.log(`📊 最终活动记录数: ${activities.length}条`);
+            
         } catch (error) {
             console.error('❌ 从 Supabase 加载数据失败:', error);
         }
+    } else {
+        console.warn('⚠️ Supabase 未连接或未初始化，无法从云端加载活动记录');
+        if (!supabase) {
+            console.warn('  - supabase 对象不存在');
+        } else if (!window.supabaseClient) {
+            console.warn('  - window.supabaseClient 不存在');
+        } else if (!window.supabaseClient.isConnected()) {
+            console.warn('  - window.supabaseClient.isConnected() 返回 false');
+        }
     }
+    
+    console.log(`========== 活动记录加载结束 ==========`);
+    console.log(`📊 总计: ${activities.length}条活动记录\n`);
 }
 
 // 工具函数
