@@ -839,14 +839,23 @@ class MultiStopwatchManager {
 
     // 保存数据到本地存储和 Supabase
     async saveData() {
+        console.log('\n💾 ========== 开始保存数据 ==========');
+        console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+        console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
+        
         const data = {};
         const now = Date.now();
         this.timers.forEach((timer, name) => {
             // 标记本地最新更新时间，避免被较旧的云端状态覆盖
             timer.lastUpdate = now;
             data[name] = { ...timer };
+            console.log(`📋 准备保存计时器: ${name}`, {
+                运行中: timer.isRunning,
+                已用时: Math.floor((timer.elapsedTime || 0) / 1000) + '秒'
+            });
         });
         localStorage.setItem('multiStopwatchData', JSON.stringify(data));
+        console.log(`✅ 已保存到本地存储 (${this.timers.size} 个计时器)`);
         
         // 同时保存兼容旧统计系统的数据格式
         this.saveCompatibleData();
@@ -854,19 +863,19 @@ class MultiStopwatchManager {
         // 如果 Supabase 连接成功，也保存到云端
         if (this.supabase) {
             try {
-                console.log('🔄 MultiStopwatchManager: 正在同步数据到 Supabase...');
+                console.log('\n☁️ 开始同步到云端...');
                 
                 // 获取当前用户
                 const { data: { user } } = await this.supabase.auth.getUser();
                 if (!user) {
-                    console.warn('MultiStopwatchManager: 用户未登录，跳过云端同步');
+                    console.warn('⚠️ 用户未登录，跳过云端同步');
                     return;
                 }
                 
-                // 保存多计时器数据
-                const { data: supabaseData, error } = await this.supabase
-                    .from('multi_timers')
-                    .upsert(Array.from(this.timers.entries()).map(([name, timer]) => ({
+                console.log(`👤 当前用户: ${user.email}`);
+                
+                const timersToSync = Array.from(this.timers.entries()).map(([name, timer]) => {
+                    const record = {
                         id: timer.id || crypto.randomUUID(), // 使用真正的 UUID
                         user_id: user.id, // 关联用户ID
                         timer_name: name,
@@ -876,20 +885,38 @@ class MultiStopwatchManager {
                         laps: timer.laps || [],
                         created_at: new Date(timer.created).toISOString(),
                         updated_at: new Date().toISOString()
-                    })), {
+                    };
+                    
+                    console.log(`☁️ 将同步到云端: ${name}`, {
+                        运行中: record.is_running,
+                        已用时: Math.floor(record.elapsed_time_ms / 1000) + '秒'
+                    });
+                    
+                    return record;
+                });
+                
+                // 保存多计时器数据
+                const { data: supabaseData, error } = await this.supabase
+                    .from('multi_timers')
+                    .upsert(timersToSync, {
                         onConflict: 'user_id,timer_name' // 使用 user_id 和 timer_name 作为冲突检测字段
                     });
                 
                 if (error) {
-                    console.error('❌ MultiStopwatchManager: 保存到 Supabase 失败:', error);
+                    console.error('❌ 保存到 Supabase 失败:', error);
                 } else {
-                    console.log('✅ MultiStopwatchManager: 数据已同步到 Supabase');
+                    console.log(`✅ 数据已同步到 Supabase (${timersToSync.length} 个计时器)`);
+                    console.log(`📢 其他设备刷新后将看到这些变化`);
                 }
                 
             } catch (error) {
-                console.error('❌ MultiStopwatchManager: Supabase 同步失败:', error);
+                console.error('❌ Supabase 同步异常:', error);
             }
+        } else {
+            console.log('⚠️ Supabase 未初始化，跳过云端同步');
         }
+        
+        console.log(`========== 保存数据结束 ==========\n`);
     }
 
     // *** 关键修复：清除当前活动记录 ***
@@ -988,11 +1015,21 @@ class MultiStopwatchManager {
     }
 
     // 完成活动并重置计时器
-    completeActivityAndReset(activityName) {
-        console.log(`🏁 开始完成活动: "${activityName}"`);
+    async completeActivityAndReset(activityName) {
+        console.log(`\n🏁 ========== 开始完成活动 ==========`);
+        console.log(`📌 活动名称: "${activityName}"`);
+        console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+        console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
         
         const timer = this.getTimer(activityName);
         const endTime = Date.now();
+        
+        console.log(`📊 当前计时器状态:`, {
+            isRunning: timer.isRunning,
+            elapsedTime: timer.elapsedTime,
+            startTime: timer.startTime,
+            laps: timer.laps?.length || 0
+        });
         
         // 首先停止计时器的实时更新
         if (this.updateIntervals.has(activityName)) {
@@ -1014,14 +1051,24 @@ class MultiStopwatchManager {
             const actualStartTime = timer.startTime || (endTime - timer.elapsedTime);
             const actualEndTime = actualStartTime + timer.elapsedTime; // 开始时间 + 实际持续时间
             
-            console.log(`💾 保存活动记录: "${activityName}", 实际用时: ${Math.floor(timer.elapsedTime / 1000)}秒 (修复了暂停时间计算bug)`);
+            console.log(`💾 准备保存活动记录:`, {
+                activityName,
+                实际用时秒: Math.floor(timer.elapsedTime / 1000),
+                开始时间: new Date(actualStartTime).toLocaleString('zh-CN'),
+                结束时间: new Date(actualEndTime).toLocaleString('zh-CN')
+            });
             
-            // 保存活动记录
-            this.completeActivity(activityName, actualStartTime, actualEndTime);
+            // 保存活动记录（异步等待）
+            await this.completeActivity(activityName, actualStartTime, actualEndTime);
+            console.log(`✅ 活动记录保存完成`);
         }
         
-        // 重置计时器
-        console.log(`🔄 重置计时器: "${activityName}"`);
+        // *** 关键步骤：从云端删除计时器状态 ***
+        console.log(`🗑️ 准备从云端删除计时器状态...`);
+        await this.deleteTimerFromCloud(activityName);
+        
+        // 重置计时器（本地）
+        console.log(`🔄 重置本地计时器: "${activityName}"`);
         this.reset(activityName);
         
         // 显示完成提示
@@ -1038,6 +1085,7 @@ class MultiStopwatchManager {
         }
         
         console.log(`✅ 活动"${activityName}"已完成，总用时: ${timeMessage}`);
+        console.log(`========== 完成活动结束 ==========\n`);
         
         if (timer.elapsedTime > 0) {
             alert(`活动"${activityName}"已完成！\n总用时: ${timeMessage}\n记录已保存到统计中。`);
@@ -1046,24 +1094,67 @@ class MultiStopwatchManager {
         }
     }
 
+    // 从云端删除计时器状态
+    async deleteTimerFromCloud(activityName) {
+        if (!this.supabase) {
+            console.warn('⚠️ Supabase 未初始化，无法删除云端计时器');
+            return;
+        }
+
+        try {
+            console.log(`🗑️ 开始从云端删除计时器: "${activityName}"`);
+            
+            // 获取当前用户
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) {
+                console.warn('⚠️ 用户未登录，无法删除云端计时器');
+                return;
+            }
+
+            console.log(`👤 当前用户: ${user.email} (${user.id})`);
+
+            // 从 multi_timers 表中删除
+            const { error } = await this.supabase
+                .from('multi_timers')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('timer_name', activityName);
+
+            if (error) {
+                console.error('❌ 删除云端计时器失败:', error);
+            } else {
+                console.log(`✅ 成功从云端删除计时器: "${activityName}"`);
+                console.log(`📢 其他设备刷新后将不会再看到这个计时器`);
+            }
+        } catch (error) {
+            console.error('❌ 删除云端计时器异常:', error);
+        }
+    }
+
     // 从本地存储和 Supabase 加载数据
     async loadData() {
-        console.log('🔍 loadData() 被调用');
+        console.log('\n🔍 ========== 开始加载数据 ==========');
+        console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+        console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
         
         // 首先从本地存储加载
         const data = localStorage.getItem('multiStopwatchData');
         if (data) {
             try {
                 const parsed = JSON.parse(data);
-                console.log('📦 从本地存储加载的数据:', parsed);
+                console.log(`📦 从本地存储加载了 ${Object.keys(parsed).length} 条计时器`);
                 Object.entries(parsed).forEach(([name, timer]) => {
                     this.timers.set(name, {
                         ...timer
                     });
-                    console.log(`📋 处理计时器: ${name}, 运行状态: ${timer.isRunning}`);
+                    console.log(`📋 本地计时器: ${name}`, {
+                        运行中: timer.isRunning,
+                        已用时: Math.floor((timer.elapsedTime || 0) / 1000) + '秒',
+                        最后更新: timer.lastUpdate ? new Date(timer.lastUpdate).toLocaleString('zh-CN') : '未知'
+                    });
                     // 如果计时器正在运行，重启更新间隔
                     if (timer.isRunning) {
-                        console.log(`🚀 恢复运行状态: ${name}`);
+                        console.log(`🚀 恢复本地运行状态: ${name}`);
                         const intervalId = setInterval(() => {
                             this.updateTimerCard(name);
                         }, 100);
@@ -1073,7 +1164,7 @@ class MultiStopwatchManager {
                 const running = Array.from(this.timers.entries()).filter(([, t]) => t.isRunning).map(([n]) => n);
                 this.__d('loadData() summary', { timers: this.timers.size, running });
             } catch (error) {
-                console.error('加载本地数据失败:', error);
+                console.error('❌ 加载本地数据失败:', error);
             }
         } else {
             console.log('⚠️ 没有找到本地存储的数据');
@@ -1082,14 +1173,16 @@ class MultiStopwatchManager {
         // 如果 Supabase 连接成功，尝试从云端加载最新数据
         if (this.supabase) {
             try {
-                console.log('🔄 MultiStopwatchManager: 正在从 Supabase 加载数据...');
+                console.log('\n☁️ 开始从云端加载数据...');
                 
                 // 获取当前用户
                 const { data: { user } } = await this.supabase.auth.getUser();
                 if (!user) {
-                    console.warn('MultiStopwatchManager: 用户未登录，跳过云端同步');
+                    console.warn('⚠️ 用户未登录，跳过云端同步');
                     return;
                 }
+                
+                console.log(`👤 当前用户: ${user.email}`);
                 
                 const { data: supabaseData, error } = await this.supabase
                     .from('multi_timers')
@@ -1098,17 +1191,40 @@ class MultiStopwatchManager {
                     .order('updated_at', { ascending: false });
                 
                 if (error) {
-                    console.error('❌ MultiStopwatchManager: 从 Supabase 加载失败:', error);
+                    console.error('❌ 从 Supabase 加载失败:', error);
                 } else if (supabaseData && supabaseData.length > 0) {
-                    console.log(`✅ MultiStopwatchManager: 从 Supabase 加载了 ${supabaseData.length} 条计时器记录`);
+                    console.log(`☁️ 从云端加载了 ${supabaseData.length} 条计时器记录`);
                     
                     // 转换数据格式并合并
                     supabaseData.forEach(timerData => {
                         const name = timerData.timer_name;
                         const existingTimer = this.timers.get(name);
                         
+                        const cloudUpdatedAt = new Date(timerData.updated_at);
+                        const localUpdatedAt = existingTimer?.lastUpdate ? new Date(existingTimer.lastUpdate) : new Date(0);
+                        
+                        console.log(`\n🔄 比较计时器: "${name}"`);
+                        console.log(`  ☁️  云端状态:`, {
+                            运行中: timerData.is_running,
+                            已用时: Math.floor((timerData.elapsed_time_ms || 0) / 1000) + '秒',
+                            更新时间: cloudUpdatedAt.toLocaleString('zh-CN')
+                        });
+                        
+                        if (existingTimer) {
+                            console.log(`  💻 本地状态:`, {
+                                运行中: existingTimer.isRunning,
+                                已用时: Math.floor((existingTimer.elapsedTime || 0) / 1000) + '秒',
+                                更新时间: localUpdatedAt.toLocaleString('zh-CN')
+                            });
+                        } else {
+                            console.log(`  💻 本地无此计时器`);
+                        }
+                        
                         // 如果本地没有这个计时器，或者云端数据更新，则使用云端数据
-                        if (!existingTimer || new Date(timerData.updated_at) > new Date(existingTimer.lastUpdate || 0)) {
+                        if (!existingTimer || cloudUpdatedAt > localUpdatedAt) {
+                            const decision = !existingTimer ? '本地无数据' : '云端更新';
+                            console.log(`  ✅ 决定: 使用云端数据 (${decision})`);
+                            
                             const cloudTimer = {
                                 id: timerData.id, // 保存云端 ID
                                 name: name,
@@ -1117,28 +1233,37 @@ class MultiStopwatchManager {
                                 isRunning: timerData.is_running || false,
                                 laps: timerData.laps || [],
                                 created: timerData.created_at ? new Date(timerData.created_at).getTime() : Date.now(),
-                                lastUpdate: new Date(timerData.updated_at).getTime()
+                                lastUpdate: cloudUpdatedAt.getTime()
                             };
                             
                             this.timers.set(name, cloudTimer);
-                            console.log(`☁️ 从云端恢复计时器: ${name}`);
                             
                             // 如果计时器正在运行，重启更新间隔
                             if (cloudTimer.isRunning) {
-                                console.log(`🚀 恢复云端运行状态: ${name}`);
+                                console.log(`  🚀 启动云端计时器: ${name}`);
                                 const intervalId = setInterval(() => {
                                     this.updateTimerCard(name);
                                 }, 100);
                                 this.updateIntervals.set(name, intervalId);
                             }
+                        } else {
+                            console.log(`  ⏭️  决定: 保留本地数据 (本地更新)`);
                         }
                     });
+                    
+                    console.log(`\n✅ 云端数据加载完成`);
+                } else {
+                    console.log('☁️ 云端没有计时器记录');
                 }
                 
             } catch (error) {
-                console.error('❌ MultiStopwatchManager: 从 Supabase 加载数据失败:', error);
+                console.error('❌ 从 Supabase 加载数据失败:', error);
             }
+        } else {
+            console.log('⚠️ Supabase 未初始化，跳过云端加载');
         }
+        
+        console.log(`========== 数据加载结束 ==========\n`);
     }
 
     // 清理资源
