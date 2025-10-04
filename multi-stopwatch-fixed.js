@@ -1030,10 +1030,10 @@ class MultiStopwatchManager {
                 
                 console.log(`👤 当前用户: ${user.email}`);
                 
-                // 保存到 activities 表
+                // 保存到 activities 表（使用 insert 而不是 upsert，因为每次都是新记录）
                 const { error } = await this.supabase
                     .from('activities')
-                    .upsert({
+                    .insert({
                         id: activityRecord.id,
                         user_id: user.id,
                         activity_name: activityRecord.activityName,
@@ -1044,8 +1044,6 @@ class MultiStopwatchManager {
                         color: this.getColorForActivity(activityRecord.activityName),
                         created_at: actualStartTime.toISOString(),
                         updated_at: new Date().toISOString()
-                    }, {
-                        onConflict: 'id'
                     });
                 
                 if (error) {
