@@ -116,11 +116,8 @@ class MultiStopwatchManager {
     
     // 初始化计时器详情按钮事件
     initTimerDetailButtons() {
-        // 清理旧的事件监听器
-        const buttonArea = document.getElementById('timer-button-area');
-        if (buttonArea) {
-            buttonArea.innerHTML = '';
-        }
+        // 直接调用更新按钮函数，生成按钮并绑定事件
+        this.updateTimerDetailButtons();
     }
     
     // 更新计时器详情视图
@@ -192,17 +189,25 @@ class MultiStopwatchManager {
         }
         
         buttonArea.innerHTML = buttonsHTML;
+        console.log(`🔄 计时器详情页面按钮已更新: ${this.currentTimerActivity}`);
         
         // 绑定按钮事件
         const buttons = buttonArea.querySelectorAll('.timer-control-btn');
-        buttons.forEach(button => {
+        console.log(`🔗 找到 ${buttons.length} 个按钮，开始绑定事件`);
+        buttons.forEach((button, index) => {
+            const action = button.dataset.action;
+            console.log(`🔘 绑定按钮 ${index + 1}: "${button.textContent}" -> "${action}"`);
+            
             button.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                const action = button.dataset.action;
+                console.log(`💆 计时器详情按钮被点击: "${button.textContent}" -> "${action}"`);
+                
                 if (action) {
                     this.handleTimerDetailButtonAction(action);
+                } else {
+                    console.error('❌ 按钮缺少action属性');
                 }
             });
         });
