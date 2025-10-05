@@ -232,9 +232,9 @@ class MultiStopwatchManager {
                 break;
                 
             case 'complete':
-                // 直接完成，无需确认对话框
+                // 直接完成，无需确认对话框，但显示绿色通知
                 this.completeActivityAndReset(this.currentTimerActivity);
-                this.showNotification(`"${this.currentTimerActivity}" 活动已完成并保存`);
+                this.showNotification(`"${this.currentTimerActivity}" 活动已完成并保存`, 'success');
                 // 完成后返回主视图
                 this.showMainView();
                 break;
@@ -328,20 +328,12 @@ class MultiStopwatchManager {
         }, 100); // 每100ms更新一次
     }
     
-    // 显示通知
+    // 显示通知（只显示页面内绿色通知，不显示系统弹窗）
     showNotification(message, type = 'success') {
-        // 1. 浏览器原生通知
-        if (Notification.permission === 'granted') {
-            new Notification('Attention Span Tracker', {
-                body: message,
-                icon: 'assets/时间管道.JPG'
-            });
-        }
-        
-        // 2. 控制台日志
+        // 1. 控制台日志
         console.log(`🔔 ${message}`);
         
-        // 3. 页面内通知（右上角浮动通知）
+        // 2. 页面内通知（右上角浮动通知）
         this.showInPageNotification(message, type);
     }
     
@@ -408,20 +400,44 @@ class MultiStopwatchManager {
             console.error('❌ MultiStopwatchManager: Supabase 初始化失败:', error);
         }
     }
+    
+    // 标准化活动名称（大小写不敏感）
+    normalizeActivityName(name) {
+        return name.trim().toLowerCase();
+    }
+    
+    // 查找存在的活动名称（返回原始大小写格式）
+    findExistingActivityName(inputName) {
+        const normalizedInput = this.normalizeActivityName(inputName);
+        for (const [existingName] of this.timers) {
+            if (this.normalizeActivityName(existingName) === normalizedInput) {
+                return existingName;
+            }
+        }
+        return null;
+    }
 
-    // 创建或获取活动计时器
+    // 创建或获取活动计时器（支持大小写不敏感）
     getTimer(activityName) {
-        if (!this.timers.has(activityName)) {
-            this.timers.set(activityName, {
-                name: activityName,
+        // 查找是否已存在相同的活动（大小写不敏感）
+        const existingName = this.findExistingActivityName(activityName);
+        const finalName = existingName || activityName;
+        
+        if (!this.timers.has(finalName)) {
+            this.timers.set(finalName, {
+                name: finalName,
                 startTime: null,
                 elapsedTime: 0,
                 isRunning: false,
                 laps: [],
                 created: Date.now()
             });
+            console.log(`✨ 创建新活动: "${finalName}"`);
+        } else if (existingName && existingName !== activityName) {
+            console.log(`🔄 使用已存在活动: "${activityName}" -> "${existingName}"`);
         }
-        return this.timers.get(activityName);
+        
+        return this.timers.get(finalName);
     }
 
     // 开始计时
@@ -678,11 +694,12 @@ class MultiStopwatchManager {
                 }
 
                 // 创建计时器并切换到详情视图
-                this.getTimer(activityName);
+                const timer = this.getTimer(activityName);
+                const finalActivityName = timer.name; // 使用标准化后的名称
                 this.saveData();
                 
                 // 切换到计时器详情视图
-                this.showTimerDetailView(activityName);
+                this.showTimerDetailView(finalActivityName);
             });
             
             // 添加Enter键快捷启动
@@ -703,11 +720,12 @@ class MultiStopwatchManager {
                     }
 
                     // 创建计时器并切换到详情视图
-                    this.getTimer(activityName);
+                    const timer = this.getTimer(activityName);
+                    const finalActivityName = timer.name; // 使用标准化后的名称
                     this.saveData();
                     
                     // 切换到计时器详情视图
-                    this.showTimerDetailView(activityName);
+                    this.showTimerDetailView(finalActivityName);
                 }
             });
             
@@ -987,9 +1005,9 @@ class MultiStopwatchManager {
                 break;
                 
             case 'complete':
-                // 直接完成，无需确认对话框
+                // 直接完成，无需确认对话框，但显示绿色通知
                 this.completeActivityAndReset(timer.name);
-                this.showNotification(`"${timer.name}" 活动已完成并保存`);
+                this.showNotification(`"${timer.name}" 活动已完成并保存`, 'success');
                 break;
                 
             case 'reset':
