@@ -431,94 +431,54 @@
         
         .timer-button-area {
             display: flex;
-            gap: 20px;
+            gap: 15px;
             margin-bottom: 40px;
             justify-content: center;
             flex-wrap: wrap;
+            /* 与主页按钮区域保持一致 */
+            align-items: center;
         }
         
         .timer-control-btn {
-            /* 基于主页按钮CSS框架 */
-            padding: 16px 28px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            cursor: pointer;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
             font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.15s ease;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
             display: flex;
             align-items: center;
             justify-content: center;
             min-width: 120px;
-            min-height: 50px;
-            /* 确保按钮可以正常响应点击事件 */
-            pointer-events: auto;
-            user-select: none;
-            /* 添加触摸优化 */
-            -webkit-tap-highlight-color: transparent;
-            touch-action: manipulation;
-            /* 添加轻微的边框增强视觉效果 */
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            height: 50px;
         }
         
         .timer-control-btn.primary {
-            background: linear-gradient(135deg, #4a90e2, #357abd);
-            border-color: #4a90e2;
-            color: white;
-            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
+            background-color: #4CAF50;
+            color: #FFFFFF;
         }
         
         .timer-control-btn.primary:hover {
-            background: linear-gradient(135deg, #357abd, #2968a3);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(74, 144, 226, 0.35);
-        }
-        
-        .timer-control-btn.primary:active {
-            background: linear-gradient(135deg, #2968a3, #24598b);
-            transform: translateY(0);
-            box-shadow: 0 2px 8px rgba(74, 144, 226, 0.4);
-            transition: all 0.1s ease;
+            background-color: #45a049;
         }
         
         .timer-control-btn.secondary {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.3);
-            color: #ccc;
+            background-color: #666;
+            color: #FFFFFF;
         }
         
         .timer-control-btn.secondary:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: white;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(255, 255, 255, 0.1);
-        }
-        
-        .timer-control-btn.secondary:active {
-            background: rgba(255, 255, 255, 0.08);
-            transform: translateY(0);
-            box-shadow: 0 2px 8px rgba(255, 255, 255, 0.05);
-            transition: all 0.1s ease;
+            background-color: #777;
         }
         
         .timer-control-btn.danger {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-            border-color: #e74c3c;
-            color: white;
+            background-color: #f44336;
+            color: #FFFFFF;
         }
         
         .timer-control-btn.danger:hover {
-            background: linear-gradient(135deg, #c0392b, #a93226);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(231, 76, 60, 0.35);
-        }
-        
-        .timer-control-btn.danger:active {
-            background: linear-gradient(135deg, #a93226, #8b2b1e);
-            transform: translateY(0);
-            box-shadow: 0 2px 8px rgba(231, 76, 60, 0.4);
-            transition: all 0.1s ease;
+            background-color: #da190b;
         }
         
         .timer-lap-container {
@@ -585,42 +545,16 @@
             100% { opacity: 1; }
         }
         
-        /* 增强按钮视觉反馈 */
-        .timer-btn-enhanced {
-            position: relative;
-            overflow: hidden;
-        }
-        
-        /* 按钮点击波纹效果 */
-        .timer-btn-enhanced::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0;
-            height: 0;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.3);
-            transform: translate(-50%, -50%);
-            transition: width 0.6s ease, height 0.6s ease;
-        }
-        
-        .timer-btn-enhanced:active::before {
-            width: 300px;
-            height: 300px;
-        }
-        
-        /* 按钮焦点状态 */
-        .timer-control-btn:focus {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
-        }
-        
-        /* 按钮禁用状态防护 */
-        .timer-control-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            pointer-events: none;
+        /* 计时器详情页面按钮放大样式 - 完全继承主页按钮样式 */
+        .timer-btn-large {
+            /* 放大尺寸 */
+            padding: 20px 40px;
+            font-size: 18px;
+            min-width: 150px;
+            min-height: 60px;
+            /* 增强视觉效果 */
+            border-radius: 16px;
+            font-weight: 600;
         }
         
         /* 移动端适配 */
