@@ -191,25 +191,59 @@ class MultiStopwatchManager {
         buttonArea.innerHTML = buttonsHTML;
         console.log(`🔄 计时器详情页面按钮已更新: ${this.currentTimerActivity}`);
         
-        // 绑定按钮事件
+        // 优化的按钮事件绑定 - 使用多事件绑定增强响应性
         const buttons = buttonArea.querySelectorAll('.timer-control-btn');
         console.log(`🔗 找到 ${buttons.length} 个按钮，开始绑定事件`);
+        
         buttons.forEach((button, index) => {
             const action = button.dataset.action;
-            console.log(`🔘 绑定按钮 ${index + 1}: "${button.textContent}" -> "${action}"`);
+            console.log(`🔘 绑定按钮 ${index + 1}: \"${button.textContent}\" -> \"${action}\"`);
             
-            button.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                console.log(`💆 计时器详情按钮被点击: "${button.textContent}" -> "${action}"`);
-                
-                if (action) {
-                    this.handleTimerDetailButtonAction(action);
-                } else {
+            // 添加视觉反馈类，使按钮看起来更有活力
+            button.classList.add('timer-btn-enhanced');
+            
+            // 使用更直接的事件处理函数，减少包装
+            const handleClick = () => {
+                if (!action) {
                     console.error('❌ 按钮缺少action属性');
+                    return;
                 }
-            });
+                
+                // 防抖 - 避免重复点击
+                const now = Date.now();
+                if (this.__lastButtonClick && (now - this.__lastButtonClick < 200)) {
+                    console.log('💫 按钮点击过快，已防抖');
+                    return;
+                }
+                this.__lastButtonClick = now;
+                
+                console.log(`💆 计时器详情按钮被点击: \"${button.textContent}\" -> \"${action}\"`);
+                
+                // 添加视觉反馈
+                button.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    if (button.style) {
+                        button.style.transform = '';
+                    }
+                }, 100);
+                
+                // 执行操作
+                this.handleTimerDetailButtonAction(action);
+            };
+            
+            // 绑定多种事件增强响应性
+            button.addEventListener('click', handleClick, { passive: false });
+            button.addEventListener('touchstart', (e) => {
+                // 触摸反馈，但不执行操作
+                button.style.transform = 'scale(0.98)';
+            }, { passive: true });
+            button.addEventListener('touchend', (e) => {
+                setTimeout(() => {
+                    if (button.style) {
+                        button.style.transform = '';
+                    }
+                }, 150);
+            }, { passive: true });
         });
     }
     
