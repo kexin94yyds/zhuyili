@@ -702,7 +702,7 @@ class MultiStopwatchManager {
                 const activityName = activityNameInput.value.trim();
                 
                 if (!activityName) {
-                    alert('请输入活动名称');
+                    this.showNotification('请输入活动名称', 'error');
                     return;
                 }
 
@@ -728,7 +728,7 @@ class MultiStopwatchManager {
                     const activityName = activityNameInput.value.trim();
                     
                     if (!activityName) {
-                        alert('请输入活动名称');
+                        this.showNotification('请输入活动名称', 'error');
                         return;
                     }
 
@@ -1554,14 +1554,11 @@ class MultiStopwatchManager {
             timeMessage = '0 秒';
         }
         
-        console.log(`✅ 活动"${activityName}"已完成，总用时: ${timeMessage}`);
+        console.log(`\u2705 \u6d3b\u52a8\"${activityName}\"已完\u6210，总用\u65f6: ${timeMessage}`);
         console.log(`========== 完成活动结束 ==========\n`);
         
-        if (timer.elapsedTime > 0) {
-            alert(`活动"${activityName}"已完成！\n总用时: ${timeMessage}\n记录已保存到统计中。`);
-        } else {
-            alert(`活动"${activityName}"已重置。`);
-        }
+        // 使用页面内通知替代alert系统弹窗
+        // 此函数是由complete按钮调用，通知已由按钮处理函数显示
     }
 
     // 从云端删除计时器状态
