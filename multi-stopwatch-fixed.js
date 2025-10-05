@@ -114,9 +114,35 @@ class MultiStopwatchManager {
         this.startTimerDetailUpdate();
     }
     
-    // 初始化计时器详情按钮事件
+    // 初始化计时器详情按钮事件（使用事件委托，只绑定一次）
     initTimerDetailButtons() {
-        // 直接调用更新按钮函数，生成按钮并绑定事件
+        const buttonArea = document.getElementById('timer-button-area');
+        if (!buttonArea) return;
+        
+        // 移除旧的事件监听器（如果有）
+        if (this._detailButtonHandler) {
+            buttonArea.removeEventListener('click', this._detailButtonHandler);
+        }
+        
+        // 使用事件委托，只绑定一次
+        this._detailButtonHandler = (e) => {
+            const button = e.target.closest('.timer-control-btn');
+            if (!button) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const action = button.dataset.action;
+            if (!action) return;
+            
+            console.log(`👆 详情页按钮点击: ${action}`);
+            this.handleTimerDetailButtonAction(action);
+        };
+        
+        buttonArea.addEventListener('click', this._detailButtonHandler);
+        console.log('✅ 详情页按钮事件已绑定（事件委托）');
+        
+        // 初始生成按钮HTML
         this.updateTimerDetailButtons();
     }
     
@@ -149,14 +175,14 @@ class MultiStopwatchManager {
             }
         }
         
-        // 更新按钮
-        this.updateTimerDetailButtons();
+        // 不在这里更新按钮！避免重复绑定事件
+        // this.updateTimerDetailButtons(); // 已删除
         
         // 更新Lap列表
         this.updateTimerDetailLaps();
     }
     
-    // 更新计时器详情按钮
+    // 更新计时器详情按钮HTML（不绑定事件）
     updateTimerDetailButtons() {
         if (this.currentView !== 'timer-detail' || !this.currentTimerActivity) {
             return;
@@ -166,7 +192,7 @@ class MultiStopwatchManager {
         const buttonArea = document.getElementById('timer-button-area');
         if (!timer || !buttonArea) return;
         
-        // 生成按钮 HTML
+        // 生成按钮HTML，使用主页相同的timer-btn类
         let buttonsHTML = '';
         if (timer.isRunning) {
             buttonsHTML = `
@@ -188,63 +214,8 @@ class MultiStopwatchManager {
             `;
         }
         
+        // 只更新HTML，不绑定事件（事件已在initTimerDetailButtons中用事件委托绑定）
         buttonArea.innerHTML = buttonsHTML;
-        console.log(`🔄 计时器详情页面按钮已更新: ${this.currentTimerActivity}`);
-        
-        // 优化的按钮事件绑定 - 使用多事件绑定增强响应性
-        const buttons = buttonArea.querySelectorAll('.timer-control-btn');
-        console.log(`🔗 找到 ${buttons.length} 个按钮，开始绑定事件`);
-        
-        buttons.forEach((button, index) => {
-            const action = button.dataset.action;
-            console.log(`🔘 绑定按钮 ${index + 1}: \"${button.textContent}\" -> \"${action}\"`);
-            
-            // 添加视觉反馈类，使按钮看起来更有活力
-            button.classList.add('timer-btn-enhanced');
-            
-            // 使用更直接的事件处理函数，减少包装
-            const handleClick = () => {
-                if (!action) {
-                    console.error('❌ 按钮缺少action属性');
-                    return;
-                }
-                
-                // 防抖 - 避免重复点击
-                const now = Date.now();
-                if (this.__lastButtonClick && (now - this.__lastButtonClick < 200)) {
-                    console.log('💫 按钮点击过快，已防抖');
-                    return;
-                }
-                this.__lastButtonClick = now;
-                
-                console.log(`💆 计时器详情按钮被点击: \"${button.textContent}\" -> \"${action}\"`);
-                
-                // 添加视觉反馈
-                button.style.transform = 'scale(0.95)';
-                setTimeout(() => {
-                    if (button.style) {
-                        button.style.transform = '';
-                    }
-                }, 100);
-                
-                // 执行操作
-                this.handleTimerDetailButtonAction(action);
-            };
-            
-            // 绑定多种事件增强响应性
-            button.addEventListener('click', handleClick, { passive: false });
-            button.addEventListener('touchstart', (e) => {
-                // 触摸反馈，但不执行操作
-                button.style.transform = 'scale(0.98)';
-            }, { passive: true });
-            button.addEventListener('touchend', (e) => {
-                setTimeout(() => {
-                    if (button.style) {
-                        button.style.transform = '';
-                    }
-                }, 150);
-            }, { passive: true });
-        });
     }
     
     // 处理计时器详情按钮操作
@@ -256,39 +227,42 @@ class MultiStopwatchManager {
         switch (action) {
             case 'start':
                 this.start(this.currentTimerActivity);
-                this.showNotification(`"${this.currentTimerActivity}" 已开始计时`);
+                this.showNotification(`\"${this.currentTimerActivity}\" 已开始计时`);
+                this.updateTimerDetailButtons(); // 更新按钮HTML
                 break;
                 
             case 'stop':
                 this.stop(this.currentTimerActivity);
-                this.showNotification(`"${this.currentTimerActivity}" 已暂停`);
+                this.showNotification(`\"${this.currentTimerActivity}\" 已暂停`);
+                this.updateTimerDetailButtons(); // 更新按钮HTML
                 break;
                 
             case 'lap':
                 this.addLap(this.currentTimerActivity);
                 const timer = this.getTimer(this.currentTimerActivity);
                 this.showNotification(`已添加第 ${timer.laps.length} 个分段`);
+                // Lap不需要更新按钮
                 break;
                 
             case 'complete':
                 // 直接完成，无需确认对话框，但显示绿色通知
                 this.completeActivityAndReset(this.currentTimerActivity);
-                this.showNotification(`"${this.currentTimerActivity}" 活动已完成并保存`, 'success');
+                this.showNotification(`\"${this.currentTimerActivity}\" 活动已完成并保存`, 'success');
                 // 完成后返回主视图
                 this.showMainView();
                 break;
                 
             case 'reset':
-                if (confirm(`确定要重置"${this.currentTimerActivity}"的计时器吗？这将清除当前计时数据。`)) {
+                if (confirm(`确定要重置\"${this.currentTimerActivity}\"的计时器吗？这将清除当前计时数据。`)) {
                     this.reset(this.currentTimerActivity);
-                    this.showNotification(`"${this.currentTimerActivity}" 计时器已重置`);
+                    this.updateTimerDetailButtons(); // 更新按钮HTML
                 }
                 break;
                 
             case 'delete':
-                if (confirm(`确定要删除"${this.currentTimerActivity}"计时器吗？删除后将无法恢复。`)) {
+                if (confirm(`确定要删除\"${this.currentTimerActivity}\"计时器吗？删除后将无法恢复。`)) {
                     this.delete(this.currentTimerActivity);
-                    this.showNotification(`"${this.currentTimerActivity}" 计时器已删除`);
+                    this.showNotification(`\"${this.currentTimerActivity}\" 计时器已删除`);
                     // 删除后返回主视图
                     this.showMainView();
                 }
