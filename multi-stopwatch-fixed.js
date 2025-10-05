@@ -1024,9 +1024,9 @@ class MultiStopwatchManager {
                 break;
                 
             case 'reset':
-                if (confirm(`确定要重置"${timer.name}"的计时器吗？这将清除当前计时数据。`)) {
+                if (confirm(`确定要重置\"${timer.name}\"的计时器吗？这将清除当前计时数据。`)) {
                     this.reset(timer.name);
-                    this.showNotification(`"${timer.name}" 计时器已重置`);
+                    // 不显示通知，已经有confirm对话框
                 }
                 break;
                 
