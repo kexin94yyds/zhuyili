@@ -232,12 +232,11 @@ class MultiStopwatchManager {
                 break;
                 
             case 'complete':
-                if (confirm(`确定要完成"${this.currentTimerActivity}"活动吗？这将保存活动记录并重置计时器。`)) {
-                    this.completeActivityAndReset(this.currentTimerActivity);
-                    this.showNotification(`"${this.currentTimerActivity}" 活动已完成并保存`);
-                    // 完成后返回主视图
-                    this.showMainView();
-                }
+                // 直接完成，无需确认对话框
+                this.completeActivityAndReset(this.currentTimerActivity);
+                this.showNotification(`"${this.currentTimerActivity}" 活动已完成并保存`);
+                // 完成后返回主视图
+                this.showMainView();
                 break;
                 
             case 'reset':
@@ -330,8 +329,8 @@ class MultiStopwatchManager {
     }
     
     // 显示通知
-    showNotification(message, type = 'info') {
-        // 为了简化，使用浏览器原生通知或console
+    showNotification(message, type = 'success') {
+        // 1. 浏览器原生通知
         if (Notification.permission === 'granted') {
             new Notification('Attention Span Tracker', {
                 body: message,
@@ -339,10 +338,56 @@ class MultiStopwatchManager {
             });
         }
         
-        // 同时显示在控制台
+        // 2. 控制台日志
         console.log(`🔔 ${message}`);
         
-        // 可以在这里添加更复杂的通知UI
+        // 3. 页面内通知（右上角浮动通知）
+        this.showInPageNotification(message, type);
+    }
+    
+    // 页面内通知显示
+    showInPageNotification(message, type = 'success') {
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.className = `in-page-notification ${type}`;
+        notification.textContent = message;
+        
+        // 样式
+        Object.assign(notification.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: type === 'success' ? '#4CAF50' : '#f44336',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            zIndex: '10000',
+            transform: 'translateX(100%)',
+            transition: 'transform 0.3s ease',
+            maxWidth: '300px',
+            wordWrap: 'break-word'
+        });
+        
+        // 添加到页面
+        document.body.appendChild(notification);
+        
+        // 显示动画
+        setTimeout(() => {
+            notification.style.transform = 'translateX(0)';
+        }, 50);
+        
+        // 3秒后隐藏
+        setTimeout(() => {
+            notification.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
     }
     
     // 初始化 Supabase 客户端
@@ -942,10 +987,9 @@ class MultiStopwatchManager {
                 break;
                 
             case 'complete':
-                if (confirm(`确定要完成"${timer.name}"活动吗？这将保存活动记录并重置计时器。`)) {
-                    this.completeActivityAndReset(timer.name);
-                    this.showNotification(`"${timer.name}" 活动已完成并保存`);
-                }
+                // 直接完成，无需确认对话框
+                this.completeActivityAndReset(timer.name);
+                this.showNotification(`"${timer.name}" 活动已完成并保存`);
                 break;
                 
             case 'reset':
