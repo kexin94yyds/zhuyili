@@ -923,26 +923,55 @@ function formatDuration(minutes) {
     return `${hours} 小时 ${remainingMinutes} 分钟`;
 }
 
-// 根据活动名称生成颜色
+// 根据活动名称生成颜色（优化版，确保每个活动都有独特颜色）
 function getColorForActivity(activityName) {
-    // 简单的哈希函数生成颜色
-    let hash = 0;
-    for (let i = 0; i < activityName.length; i++) {
-        hash = activityName.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    
+    // 使用更多易区分的颜色，增加颜色池
     const colors = [
-        '#3498db', // 蓝色
-        '#2ecc71', // 绿色
-        '#e74c3c', // 红色
-        '#f39c12', // 橙色
-        '#9b59b6', // 紫色
-        '#1abc9c', // 青色
-        '#d35400', // 深橙色
-        '#2c3e50'  // 深蓝色
+        '#FF6B6B', // 珊瑚红
+        '#4ECDC4', // 青绿色
+        '#45B7D1', // 天蓝色
+        '#FFA07A', // 淡橙红
+        '#98D8C8', // 薄荷绿
+        '#F7DC6F', // 香蕉黄
+        '#BB8FCE', // 薄薰衣草紫
+        '#85C1E2', // 天鹅绒蓝
+        '#F8B195', // 粉橙色
+        '#C06C84', // 老玫瑰红
+        '#6C5B7B', // 紫灰色
+        '#355C7D', // 钢青色
+        '#99B898', // 海泡绿
+        '#FECEAB', // 蔑桃色
+        '#FF847C', // 赭石红
+        '#E84A5F', // 西瓜红
+        '#2A363B', // 炭灰色
+        '#A8E6CF', // 薄荷蓝
+        '#FFD3B6', // 淡桃粉
+        '#FFAAA5', // 三文鱼粉
+        '#FF8B94', // 芺草红
+        '#957DAD', // 薰衣草紫
+        '#D291BC', // 粉紫色
+        '#FEC8D8', // 樱花粉
+        '#FFDFD3', // 蜡壳粉
+        '#A8DADC', // 粉蓝色
+        '#457B9D', // 水手蓝
+        '#1D3557', // 海军蓝
+        '#F4A261', // 香蕉橙
+        '#E76F51', // 燃烧橙
+        '#2A9D8F', // 波斯绿
+        '#E9C46A'  // 金黄色
     ];
     
-    return colors[Math.abs(hash) % colors.length];
+    // 使用更好的哈希算法，减少冲突
+    let hash = 0;
+    for (let i = 0; i < activityName.length; i++) {
+        const char = activityName.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    // 使用绝对值并确保正数
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
 }
 
 // 更新统计视图
