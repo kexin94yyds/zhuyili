@@ -22,12 +22,329 @@ class MultiStopwatchManager {
         this.timers = new Map(); // 存储所有活动的计时器
         this.updateIntervals = new Map(); // 存储更新间隔ID
         this.supabase = null; // Supabase 客户端
+        
+        // 视图管理
+        this.currentView = 'main';
+        this.currentTimerActivity = null;
+        this.timerDetailUpdateInterval = null;
         this.initSupabase();
         this.loadData().then(() => {
             this.initMainPageUI();
         });
     }
 
+    // ========== 视图管理函数 ==========
+    
+    // 显示主视图
+    showMainView() {
+        console.log('🏠 切换到主视图');
+        
+        const mainView = document.getElementById('main-view');
+        const timerDetailView = document.getElementById('timer-detail-view');
+        
+        if (mainView && timerDetailView) {
+            mainView.classList.remove('hidden');
+            mainView.classList.add('visible');
+            timerDetailView.classList.remove('visible');
+            timerDetailView.classList.add('hidden');
+            
+            this.currentView = 'main';
+            
+            // 清理计时器详情视图的更新间隔
+            if (this.timerDetailUpdateInterval) {
+                clearInterval(this.timerDetailUpdateInterval);
+                this.timerDetailUpdateInterval = null;
+            }
+            
+            // 刷新主视图显示
+            this.updateMainPageUI();
+            this.startRealTimeUpdate();
+        }
+    }
+    
+    // 显示计时器详情视图
+    showTimerDetailView(activityName) {
+        console.log(`🕰️ 切换到计时器详情视图: "${activityName}"`);
+        
+        const mainView = document.getElementById('main-view');
+        const timerDetailView = document.getElementById('timer-detail-view');
+        
+        if (mainView && timerDetailView) {
+            mainView.classList.remove('visible');
+            mainView.classList.add('hidden');
+            timerDetailView.classList.remove('hidden');
+            timerDetailView.classList.add('visible');
+            
+            this.currentView = 'timer-detail';
+            this.currentTimerActivity = activityName;
+            
+            // 初始化计时器详情视图
+            this.initTimerDetailView(activityName);
+        }
+    }
+    
+    // 初始化计时器详情视图
+    initTimerDetailView(activityName) {
+        const timer = this.getTimer(activityName);
+        
+        // 更新标题
+        const titleElement = document.getElementById('timer-activity-title');
+        if (titleElement) {
+            titleElement.innerHTML = `${activityName}<span class="status-indicator" id="timer-status-indicator"></span>`;
+        }
+        
+        // 初始化按钮事件
+        this.initTimerDetailButtons();
+        
+        // 初始化返回按钮
+        const backBtn = document.getElementById('timer-back-btn');
+        if (backBtn) {
+            backBtn.onclick = () => {
+                this.showMainView();
+            };
+        }
+        
+        // 初始化活动切换器
+        this.updateTimerActivitySwitcher();
+        
+        // 初始更新显示
+        this.updateTimerDetailView();
+        
+        // 启动实时更新
+        this.startTimerDetailUpdate();
+    }
+    
+    // 初始化计时器详情按钮事件
+    initTimerDetailButtons() {
+        // 清理旧的事件监听器
+        const buttonArea = document.getElementById('timer-button-area');
+        if (buttonArea) {
+            buttonArea.innerHTML = '';
+        }
+    }
+    
+    // 更新计时器详情视图
+    updateTimerDetailView() {
+        if (this.currentView !== 'timer-detail' || !this.currentTimerActivity) {
+            return;
+        }
+        
+        const timer = this.getTimer(this.currentTimerActivity);
+        if (!timer) return;
+        
+        // 更新时间显示
+        const timeDisplay = document.getElementById('timer-time-display');
+        if (timeDisplay) {
+            const currentTime = this.getCurrentTime(this.currentTimerActivity);
+            timeDisplay.textContent = this.formatTime(currentTime);
+        }
+        
+        // 更新状态指示器
+        const statusIndicator = document.getElementById('timer-status-indicator');
+        if (statusIndicator) {
+            statusIndicator.className = 'status-indicator';
+            if (timer.isRunning) {
+                statusIndicator.classList.add('status-running');
+            } else if (timer.elapsedTime > 0) {
+                statusIndicator.classList.add('status-paused');
+            } else {
+                statusIndicator.classList.add('status-stopped');
+            }
+        }
+        
+        // 更新按钮
+        this.updateTimerDetailButtons();
+        
+        // 更新Lap列表
+        this.updateTimerDetailLaps();
+    }
+    
+    // 更新计时器详情按钮
+    updateTimerDetailButtons() {
+        if (this.currentView !== 'timer-detail' || !this.currentTimerActivity) {
+            return;
+        }
+        
+        const timer = this.getTimer(this.currentTimerActivity);
+        const buttonArea = document.getElementById('timer-button-area');
+        if (!timer || !buttonArea) return;
+        
+        // 生成按钮 HTML
+        let buttonsHTML = '';
+        if (timer.isRunning) {
+            buttonsHTML = `
+                <button class="timer-control-btn secondary" data-action="stop">暂停</button>
+                <button class="timer-control-btn primary" data-action="lap">分段</button>
+                <button class="timer-control-btn primary" data-action="complete">完成</button>
+            `;
+        } else if (timer.elapsedTime > 0) {
+            buttonsHTML = `
+                <button class="timer-control-btn primary" data-action="start">继续</button>
+                <button class="timer-control-btn primary" data-action="complete">完成</button>
+                <button class="timer-control-btn secondary" data-action="reset">重置</button>
+                <button class="timer-control-btn danger" data-action="delete">删除</button>
+            `;
+        } else {
+            buttonsHTML = `
+                <button class="timer-control-btn primary" data-action="start">开始</button>
+                <button class="timer-control-btn danger" data-action="delete">删除</button>
+            `;
+        }
+        
+        buttonArea.innerHTML = buttonsHTML;
+        
+        // 绑定按钮事件
+        const buttons = buttonArea.querySelectorAll('.timer-control-btn');
+        buttons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const action = button.dataset.action;
+                if (action) {
+                    this.handleTimerDetailButtonAction(action);
+                }
+            });
+        });
+    }
+    
+    // 处理计时器详情按钮操作
+    handleTimerDetailButtonAction(action) {
+        if (!this.currentTimerActivity) return;
+        
+        console.log(`🔘 计时器详情视图按钮操作: ${action} - ${this.currentTimerActivity}`);
+        
+        switch (action) {
+            case 'start':
+                this.start(this.currentTimerActivity);
+                this.showNotification(`"${this.currentTimerActivity}" 已开始计时`);
+                break;
+                
+            case 'stop':
+                this.stop(this.currentTimerActivity);
+                this.showNotification(`"${this.currentTimerActivity}" 已暂停`);
+                break;
+                
+            case 'lap':
+                this.addLap(this.currentTimerActivity);
+                const timer = this.getTimer(this.currentTimerActivity);
+                this.showNotification(`已添加第 ${timer.laps.length} 个分段`);
+                break;
+                
+            case 'complete':
+                if (confirm(`确定要完成"${this.currentTimerActivity}"活动吗？这将保存活动记录并重置计时器。`)) {
+                    this.completeActivityAndReset(this.currentTimerActivity);
+                    this.showNotification(`"${this.currentTimerActivity}" 活动已完成并保存`);
+                    // 完成后返回主视图
+                    this.showMainView();
+                }
+                break;
+                
+            case 'reset':
+                if (confirm(`确定要重置"${this.currentTimerActivity}"的计时器吗？这将清除当前计时数据。`)) {
+                    this.reset(this.currentTimerActivity);
+                    this.showNotification(`"${this.currentTimerActivity}" 计时器已重置`);
+                }
+                break;
+                
+            case 'delete':
+                if (confirm(`确定要删除"${this.currentTimerActivity}"计时器吗？删除后将无法恢复。`)) {
+                    this.delete(this.currentTimerActivity);
+                    this.showNotification(`"${this.currentTimerActivity}" 计时器已删除`);
+                    // 删除后返回主视图
+                    this.showMainView();
+                }
+                break;
+        }
+    }
+    
+    // 更新计时器详情Lap列表
+    updateTimerDetailLaps() {
+        if (this.currentView !== 'timer-detail' || !this.currentTimerActivity) {
+            return;
+        }
+        
+        const timer = this.getTimer(this.currentTimerActivity);
+        const lapList = document.getElementById('timer-lap-list');
+        if (!timer || !lapList) return;
+        
+        lapList.innerHTML = '';
+        
+        // 倒序显示Lap（最新的在前面）
+        if (timer.laps && timer.laps.length > 0) {
+            timer.laps.slice().reverse().forEach(lap => {
+                const lapItem = document.createElement('div');
+                lapItem.className = 'timer-lap-item';
+                lapItem.innerHTML = `
+                    <span class="timer-lap-number">Lap ${lap.number}</span>
+                    <span class="lap-split">${this.formatTime(lap.split)}</span>
+                    <span class="lap-total">${this.formatTime(lap.total)}</span>
+                `;
+                lapList.appendChild(lapItem);
+            });
+        }
+    }
+    
+    // 更新计旲器详情活动切换器
+    updateTimerActivitySwitcher() {
+        const switcher = document.getElementById('timer-activity-switcher');
+        if (!switcher || this.currentView !== 'timer-detail') return;
+        
+        const activities = this.getAllActivities();
+        switcher.innerHTML = '<option value="">切换活动</option>';
+        
+        activities.forEach(activity => {
+            if (activity !== this.currentTimerActivity) {
+                const option = document.createElement('option');
+                option.value = activity;
+                option.textContent = activity;
+                switcher.appendChild(option);
+            }
+        });
+        
+        // 绑定切换事件
+        switcher.onchange = (e) => {
+            if (e.target.value) {
+                this.showTimerDetailView(e.target.value);
+            }
+        };
+    }
+    
+    // 启动计时器详情视图实时更新
+    startTimerDetailUpdate() {
+        // 清理旧的间隔
+        if (this.timerDetailUpdateInterval) {
+            clearInterval(this.timerDetailUpdateInterval);
+        }
+        
+        // 启动新的更新间隔
+        this.timerDetailUpdateInterval = setInterval(() => {
+            if (this.currentView === 'timer-detail' && this.currentTimerActivity) {
+                this.updateTimerDetailView();
+            } else {
+                // 如果不在详情视图，清理间隔
+                clearInterval(this.timerDetailUpdateInterval);
+                this.timerDetailUpdateInterval = null;
+            }
+        }, 100); // 每100ms更新一次
+    }
+    
+    // 显示通知
+    showNotification(message, type = 'info') {
+        // 为了简化，使用浏览器原生通知或console
+        if (Notification.permission === 'granted') {
+            new Notification('Attention Span Tracker', {
+                body: message,
+                icon: 'assets/时间管道.JPG'
+            });
+        }
+        
+        // 同时显示在控制台
+        console.log(`🔔 ${message}`);
+        
+        // 可以在这里添加更复杂的通知UI
+    }
+    
     // 初始化 Supabase 客户端
     initSupabase() {
         console.log('🚀 MultiStopwatchManager: 开始初始化 Supabase...');
@@ -315,12 +632,12 @@ class MultiStopwatchManager {
                     return;
                 }
 
-                // 创建计时器并跳转到计时页面
+                // 创建计时器并切换到详情视图
                 this.getTimer(activityName);
                 this.saveData();
                 
-                // 跳转到计时页面
-                window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
+                // 切换到计时器详情视图
+                this.showTimerDetailView(activityName);
             });
             
             // 添加Enter键快捷启动
@@ -340,12 +657,12 @@ class MultiStopwatchManager {
                         return;
                     }
 
-                    // 创建计时器并跳转到计时页面
+                    // 创建计时器并切换到详情视图
                     this.getTimer(activityName);
                     this.saveData();
                     
-                    // 跳转到计时页面
-                    window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
+                    // 切换到计时器详情视图
+                    this.showTimerDetailView(activityName);
                 }
             });
             
@@ -362,11 +679,18 @@ class MultiStopwatchManager {
         // 隐藏旧的当前活动区域
         this.hideOldCurrentActivity();
 
-        // 添加页面焦点监听，确保页面间状态同步
-        window.addEventListener('focus', () => {
-            console.log('🎯 页面重新获得焦点，刷新状态...');
-            this.loadData();
-            this.updateMainPageUI();
+        // 监听 localStorage 变化，确保跨窗口同步
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'multiStopwatchData') {
+                console.log('🔄 检测到数据变化，同步状态...');
+                this.loadData().then(() => {
+                    if (this.currentView === 'main') {
+                        this.updateMainPageUI();
+                    } else if (this.currentView === 'timer-detail') {
+                        this.updateTimerDetailView();
+                    }
+                });
+            }
         });
 
         this.updateMainPageUI();
@@ -526,14 +850,14 @@ class MultiStopwatchManager {
             </div>
         `;
 
-        // 添加点击事件 - 点击卡片进入计时页面
+        // 添加点击事件 - 点击卡片进入计时器详情视图
         card.addEventListener('click', (e) => {
             // 如果点击的是按钮，不触发卡片点击事件
             if (e.target.classList.contains('timer-btn')) {
                 return;
             }
             
-            window.location.href = `stopwatch.html?activity=${encodeURIComponent(timer.name)}`;
+            this.showTimerDetailView(timer.name);
         });
 
         // 添加按钮事件监听器
