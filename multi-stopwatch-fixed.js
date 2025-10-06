@@ -28,9 +28,10 @@ class MultiStopwatchManager {
         this.currentTimerActivity = null;
         this.timerDetailUpdateInterval = null;
         this.initSupabase();
-        this.loadData().then(() => {
-            this.initMainPageUI();
-        });
+        // 快速首屏：先本地加载并渲染，再后台合并云端
+        this.loadLocalDataOnly();
+        this.initMainPageUI();
+        Promise.resolve().then(() => this.loadCloudDataInBackground());
     }
 
     // ========== 视图管理函数 ==========
@@ -1675,6 +1676,77 @@ class MultiStopwatchManager {
         }
     }
 
+    // 仅从本地存储加载（首屏快速）
+    loadLocalDataOnly() {
+        console.log('\n🔍 [fast] 从本地存储加载计时器...');
+        const data = localStorage.getItem('multiStopwatchData');
+        if (data) {
+            try {
+                const parsed = JSON.parse(data);
+                Object.entries(parsed).forEach(([name, timer]) => {
+                    this.timers.set(name, { ...timer });
+                    if (timer.isRunning) {
+                        const intervalId = setInterval(() => {
+                            this.updateTimerCard(name);
+                        }, 100);
+                        this.updateIntervals.set(name, intervalId);
+                    }
+                });
+            } catch (error) {
+                console.error('❌ 本地加载失败:', error);
+            }
+        } else {
+            console.log('⚠️ 本地没有计时器数据');
+        }
+        console.log('✅ [fast] 本地计时器加载完成');
+    }
+
+    // 后台从云端加载并合并（不阻塞首屏）
+    async loadCloudDataInBackground() {
+        if (!this.supabase) { console.warn('⚠️(bg) Supabase 未初始化'); return; }
+        try {
+            console.log('\n☁️(bg) 开始从云端加载数据...');
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) { console.warn('⚠️(bg) 用户未登录'); return; }
+            const { data: supabaseData, error } = await this.supabase
+                .from('multi_timers')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('updated_at', { ascending: false });
+            if (error) { console.error('❌(bg) 云端加载失败:', error); return; }
+            if (!supabaseData || supabaseData.length === 0) { console.log('☁️(bg) 云端无计时器'); return; }
+
+            let changed = false;
+            supabaseData.forEach(timerData => {
+                const name = timerData.timer_name;
+                const existingTimer = this.timers.get(name);
+                const cloudUpdatedAt = new Date(timerData.updated_at);
+                const localUpdatedAt = new Date(existingTimer?.lastUpdate || 0);
+                if (!existingTimer || cloudUpdatedAt > localUpdatedAt) {
+                    this.timers.set(name, {
+                        id: timerData.id,
+                        name,
+                        startTime: timerData.start_time ? new Date(timerData.start_time).getTime() : null,
+                        elapsedTime: timerData.elapsed_time_ms || 0,
+                        isRunning: timerData.is_running || false,
+                        laps: timerData.laps || [],
+                        created: timerData.created_at ? new Date(timerData.created_at).getTime() : Date.now(),
+                        lastUpdate: cloudUpdatedAt.getTime()
+                    });
+                    changed = true;
+                }
+            });
+            if (changed) {
+                this.saveData();
+                this.updateMainPageUI();
+                this.startRealTimeUpdate();
+            }
+            console.log('✅(bg) 云端数据加载合并完成');
+        } catch (e) {
+            console.error('❌(bg) 从云端加载异常:', e);
+        }
+    }
+
     // 从本地存储和 Supabase 加载数据
     async loadData() {
         console.log('\n🔍 ========== 开始加载数据 ==========');
@@ -1843,20 +1915,17 @@ window.addEventListener('beforeunload', () => {
     if (typeof window !== 'undefined') {
         window.addEventListener('focus', () => {
             if (window.multiStopwatchManager) {
-                window.multiStopwatchManager.loadData().then(() => {
-                    window.multiStopwatchManager.updateMainPageUI();
-                    window.multiStopwatchManager.startRealTimeUpdate();
-                    console.log('🔄 页面focus，已强制同步状态');
+                window.multiStopwatchManager.loadCloudDataInBackground().then(() => {
+                    console.log('🔄 页面focus，已后台同步状态');
                 });
             }
         });
         window.addEventListener('storage', (e) => {
             if (e.key === 'multiStopwatchData' && window.multiStopwatchManager) {
-                window.multiStopwatchManager.loadData().then(() => {
-                    window.multiStopwatchManager.updateMainPageUI();
-                    window.multiStopwatchManager.startRealTimeUpdate();
-                    console.log('🔄 storage事件，已强制同步状态');
-                });
+                window.multiStopwatchManager.loadLocalDataOnly();
+                window.multiStopwatchManager.updateMainPageUI();
+                window.multiStopwatchManager.startRealTimeUpdate();
+                console.log('🔄 storage事件，已本地快速同步');
             }
         });
         // 页面初次加载也同步一次（防止重复执行，做幂等保护）
@@ -1864,10 +1933,12 @@ window.addEventListener('beforeunload', () => {
             if (window.__mst_initial_sync_done) return;
             window.__mst_initial_sync_done = true;
             if (window.multiStopwatchManager) {
-                window.multiStopwatchManager.loadData().then(() => {
-                    window.multiStopwatchManager.updateMainPageUI();
-                    window.multiStopwatchManager.startRealTimeUpdate();
-                    console.log('🔄 DOMContentLoaded，一次性同步状态');
+                // 初次加载：本地优先 + 云端后台
+                window.multiStopwatchManager.loadLocalDataOnly();
+                window.multiStopwatchManager.updateMainPageUI();
+                window.multiStopwatchManager.startRealTimeUpdate();
+                window.multiStopwatchManager.loadCloudDataInBackground().then(() => {
+                    console.log('🔄 DOMContentLoaded，云端后台同步完成');
                 });
             }
         });

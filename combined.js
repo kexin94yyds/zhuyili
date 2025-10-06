@@ -746,7 +746,7 @@ async function saveData() {
     }
 }
 
-// 从本地存储和 Supabase 加载数据
+// 从本地存储快速加载，并在后台合并 Supabase（加速首屏）
 async function loadData() {
     console.log('\n📂 ========== 开始加载活动记录 ==========');
     console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
@@ -783,123 +783,69 @@ async function loadData() {
         console.log('⚠️ 本地没有活动记录数据');
     }
     
-    // 检查 Supabase 连接状态
-    console.log('🔍 检查 Supabase 连接状态...');
-    console.log(`  - supabase 对象: ${supabase ? '✅ 存在' : '❌ 不存在'}`);
-    console.log(`  - window.supabaseClient: ${window.supabaseClient ? '✅ 存在' : '❌ 不存在'}`);
-    if (window.supabaseClient) {
-        console.log(`  - isConnected(): ${window.supabaseClient.isConnected ? window.supabaseClient.isConnected() : '❌ 方法不存在'}`);
-    }
-    
-    // 如果 Supabase 连接成功，尝试从云端加载最新数据
-    if (supabase && window.supabaseClient && window.supabaseClient.isConnected()) {
+    // 后台加载 Supabase（不阻塞首屏）
+    Promise.resolve().then(async () => {
         try {
-            console.log('☁️ 开始从 Supabase 加载活动记录...');
-            
-            // 获取当前用户
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                console.warn('⚠️ 用户未登录，跳过云端数据加载');
-                console.log('========== 活动记录加载结束 (仅本地) ==========\n');
+            console.log('☁️(bg) 检查 Supabase 连接状态...');
+            if (!(supabase && window.supabaseClient && window.supabaseClient.isConnected())) {
+                console.warn('⚠️(bg) 未连接，跳过云端加载');
                 return;
             }
-            
-            console.log(`👤 当前用户: ${user.email}`);
-            
-            // 加载活动记录（只加载当前用户的数据）
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) { console.warn('⚠️(bg) 未登录，跳过云端加载'); return; }
+
+            // 活动记录
             const { data: supabaseActivities, error: activitiesError } = await supabase
                 .from('activities')
                 .select('*')
                 .eq('user_id', user.id)
                 .order('start_time', { ascending: false });
-            
-            if (activitiesError) {
-                console.error('❌ 从 Supabase 加载活动记录失败:', activitiesError);
-                updateSyncStatus('error', '❌ 加载失败');
-            } else {
-                console.log(`☁️ 从云端查询到 ${supabaseActivities ? supabaseActivities.length : 0} 条活动记录`);
-                
-                if (supabaseActivities && supabaseActivities.length > 0) {
-                    console.log(`✅ 开始合并云端数据...`);
-                    updateSyncStatus('success', `✅ 已加载 ${supabaseActivities.length} 条记录`);
-                    
-                    // 转换数据格式
-                    const cloudActivities = supabaseActivities.map(activity => ({
-                        id: activity.id,
-                        activityName: activity.activity_name,
-                        startTime: new Date(activity.start_time),
-                        endTime: activity.end_time ? new Date(activity.end_time) : null,
-                        duration: activity.duration_minutes || 0,
-                        note: activity.note || '',
-                        color: activity.color || getColorForActivity(activity.activity_name)
-                    }));
-                    
-                    console.log(`📋 云端活动记录列表:`);
-                    cloudActivities.forEach((act, idx) => {
-                        console.log(`  ${idx + 1}. ${act.activityName} - ${act.duration}分钟 (${act.startTime.toLocaleString('zh-CN')})`);
-                    });
-                    
-                    // 合并数据（云端数据优先）
-                    const beforeLength = activities.length;
-                    if (activities.length === 0) {
-                        activities = cloudActivities;
-                        console.log(`✅ 本地无数据，直接使用云端数据 (${cloudActivities.length}条)`);
-                    } else {
-                        // 简单的合并策略：保留本地数据，添加云端新数据
-                        const localIds = new Set(activities.map(a => a.id));
-                        const newCloudActivities = cloudActivities.filter(a => !localIds.has(a.id));
-                        activities = [...activities, ...newCloudActivities];
-                        console.log(`✅ 合并完成: 本地${beforeLength}条 + 云端新增${newCloudActivities.length}条 = 总计${activities.length}条`);
-                    }
-                } else {
-                    console.log('☁️ 云端没有活动记录');
+            if (!activitiesError && supabaseActivities) {
+                const cloudActivities = supabaseActivities.map(activity => ({
+                    id: activity.id,
+                    activityName: activity.activity_name,
+                    startTime: new Date(activity.start_time),
+                    endTime: activity.end_time ? new Date(activity.end_time) : null,
+                    duration: activity.duration_minutes || 0,
+                    note: activity.note || '',
+                    color: activity.color || getColorForActivity(activity.activity_name)
+                }));
+                const localIds = new Set(activities.map(a => a.id));
+                const newCloudActivities = cloudActivities.filter(a => !localIds.has(a.id));
+                if (newCloudActivities.length) {
+                    activities = [...activities, ...newCloudActivities];
+                    updateActivityList();
                 }
             }
-            
-            // 加载当前活动（只加载当前用户的数据）
-            const { data: supabaseCurrent, error: currentError } = await supabase
+
+            // 当前活动
+            const { data: supabaseCurrent } = await supabase
                 .from('current_activities')
                 .select('*')
                 .eq('user_id', user.id)
                 .eq('state', 'running')
                 .order('last_update', { ascending: false })
                 .limit(1);
-            
-            if (currentError) {
-                console.error('❌ 从 Supabase 加载当前活动失败:', currentError);
-            } else if (supabaseCurrent && supabaseCurrent.length > 0) {
-                console.log('✅ 从 Supabase 加载了当前活动');
-                
+            if (supabaseCurrent && supabaseCurrent.length > 0 && !currentActivity) {
                 const cloudCurrent = supabaseCurrent[0];
-                if (!currentActivity) {
-                    currentActivity = {
-                        id: cloudCurrent.id,
-                        activityName: cloudCurrent.activity_name,
-                        startTime: new Date(cloudCurrent.start_time),
-                        endTime: null,
-                        duration: 0
-                    };
-                }
+                currentActivity = {
+                    id: cloudCurrent.id,
+                    activityName: cloudCurrent.activity_name,
+                    startTime: new Date(cloudCurrent.start_time),
+                    endTime: null,
+                    duration: 0
+                };
+                updateCurrentActivityUI();
+                startDurationTimer();
             }
-            
-            console.log(`✅ 云端数据加载完成`);
-            console.log(`📊 最终活动记录数: ${activities.length}条`);
-            
-        } catch (error) {
-            console.error('❌ 从 Supabase 加载数据失败:', error);
+            console.log('✅(bg) 云端数据加载合并完成');
+        } catch (e) {
+            console.error('❌(bg) 云端加载异常:', e);
         }
-    } else {
-        console.warn('⚠️ Supabase 未连接或未初始化，无法从云端加载活动记录');
-        if (!supabase) {
-            console.warn('  - supabase 对象不存在');
-        } else if (!window.supabaseClient) {
-            console.warn('  - window.supabaseClient 不存在');
-        } else if (!window.supabaseClient.isConnected()) {
-            console.warn('  - window.supabaseClient.isConnected() 返回 false');
-        }
-    }
-    
-    console.log(`========== 活动记录加载结束 ==========`);
+    });
+
+    console.log(`========== 活动记录加载结束 (本地优先，云端后台) ==========`);
     console.log(`📊 总计: ${activities.length}条活动记录\n`);
 }
 
