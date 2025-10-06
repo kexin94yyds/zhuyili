@@ -33,10 +33,9 @@
     
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="annual_table_styles.css">
-    <!-- 引入Chart.js库 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- 引入二维码库 -->
-    <script src="qrcode.min.js"></script>
+    <!-- Chart.js 改为按需加载，避免阻塞首屏 -->
+    <!-- 引入二维码库（defer，避免阻塞） -->
+    <script src="qrcode.min.js" defer></script>
     <style>
         html, body {
             margin: 0;
@@ -860,11 +859,11 @@
         </div>
     </div>
 
-    <!-- Supabase SDK -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <!-- Supabase SDK（defer） -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
     
-    <!-- Supabase 客户端配置 -->
-    <script src="supabaseClient.js"></script>
+    <!-- Supabase 客户端配置（defer） -->
+    <script src="supabaseClient.js" defer></script>
     
     <!-- 身份验证检查 -->
     <script>
@@ -906,11 +905,11 @@
         });
     </script>
     
-    <script src="export_import.js"></script>
-    <script src="combined.js"></script>
-    <script src="multi-stopwatch-fixed.js"></script>
+    <script src="export_import.js" defer></script>
+    <script src="combined.js" defer></script>
+    <script src="multi-stopwatch-fixed.js" defer></script>
     <!-- 支付功能 -->
-    <script src="payment.js"></script>
+    <script src="payment.js" defer></script>
 
     <!-- PWA Service Worker 注册 -->
     <script>

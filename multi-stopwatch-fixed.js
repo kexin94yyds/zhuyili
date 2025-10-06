@@ -3,7 +3,7 @@ class MultiStopwatchManager {
     constructor() {
         // --- Debug instrumentation ---
         this.__debug = {
-            enabled: true,
+            enabled: false,
             tag: 'JITTER',
             updateMainPageUICount: 0,
             lastUpdateMainPageUITs: 0,
@@ -1859,13 +1859,15 @@ window.addEventListener('beforeunload', () => {
                 });
             }
         });
-        // 页面初次加载也同步一次
+        // 页面初次加载也同步一次（防止重复执行，做幂等保护）
         window.addEventListener('DOMContentLoaded', () => {
+            if (window.__mst_initial_sync_done) return;
+            window.__mst_initial_sync_done = true;
             if (window.multiStopwatchManager) {
                 window.multiStopwatchManager.loadData().then(() => {
                     window.multiStopwatchManager.updateMainPageUI();
                     window.multiStopwatchManager.startRealTimeUpdate();
-                    console.log('🔄 DOMContentLoaded，已强制同步状态');
+                    console.log('🔄 DOMContentLoaded，一次性同步状态');
                 });
             }
         });

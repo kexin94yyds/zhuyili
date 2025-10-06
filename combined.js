@@ -50,6 +50,22 @@ let dateSelector;
 // 图表相关变量
 let timeChart = null;
 
+// 按需加载 Chart.js，避免阻塞首屏
+let __chartLoadingPromise = null;
+function ensureChartJS() {
+    if (window.Chart) return Promise.resolve();
+    if (__chartLoadingPromise) return __chartLoadingPromise;
+    __chartLoadingPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = (e) => reject(e);
+        document.head.appendChild(s);
+    });
+    return __chartLoadingPromise;
+}
+
 // 初始化 Supabase 客户端
 function initSupabase() {
     try {
@@ -218,8 +234,17 @@ function initApp() {
     // 初始化年度统计表
     initAnnualTable();
     
-    // 初始显示今日统计
-    showStatistics();
+    // 初始显示统计延后到空闲时间，避免阻塞首屏
+    const scheduleInitStats = () => {
+        try {
+            updateStatsView(STATS_VIEW.DAILY_DISTRIBUTION);
+        } catch (_) {}
+    };
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(scheduleInitStats, { timeout: 1500 });
+    } else {
+        setTimeout(scheduleInitStats, 800);
+    }
 }
 
 // 初始化用户下拉菜单
@@ -1035,21 +1060,24 @@ function updateStatsView(viewType, activityName = null) {
 }
 
 // 显示统计数据
-function showStatistics() {
+async function showStatistics() {
     const selectedDate = statsDateInput.valueAsDate;
     if (!selectedDate) return;
     
     // 根据当前视图类型显示不同的统计数据
     switch (currentStatsView) {
         case STATS_VIEW.DAILY_DISTRIBUTION:
+            await ensureChartJS();
             showDailyDistribution(selectedDate);
             break;
         case STATS_VIEW.ACTIVITY_DAILY:
             if (selectedActivity) {
+                await ensureChartJS();
                 showActivityDailyStats(selectedActivity);
             }
             break;
         case STATS_VIEW.ACTIVITY_TOTAL:
+            await ensureChartJS();
             showActivityTotalStats();
             break;
         case STATS_VIEW.ANNUAL_TABLE:
