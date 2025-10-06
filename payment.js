@@ -13,6 +13,7 @@ const PAYMENT_CONFIG = {
 
 let currentOrderNo = null;
 let pollInterval = null;
+let stopPollingFn = null;
 
 // 免费试用配置
 const FREE_TRIAL_LIMIT = 30; // 免费查看次数
@@ -475,55 +476,68 @@ function closePaymentModal() {
     }
     
     // 停止轮询
-    if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
+    if (stopPollingFn) {
+        try { stopPollingFn(); } catch (_) {}
+        stopPollingFn = null;
     }
 }
 
 // 开始轮询支付状态
 function startPaymentPolling(orderNo) {
     console.log('开始轮询支付状态，订单号:', orderNo);
-    
-    pollInterval = setInterval(async () => {
+
+    // 自适应轮询：立即检查 -> 前10次每1s -> 接着20次每2s -> 之后每3s；5分钟超时
+    let attempt = 0;
+    let stopped = false;
+    const startTs = Date.now();
+    const MAX_MS = 5 * 60 * 1000;
+
+    const finishSuccess = () => {
+        console.log('✅ 支付成功！');
+        stopped = true;
+        if (pollInterval) { clearTimeout(pollInterval); pollInterval = null; }
+
+        // 保存支付状态
+        localStorage.setItem('isPremiumUser', 'true');
+        localStorage.setItem('premiumType', 'paid');
+        localStorage.setItem('premiumOrderNo', orderNo);
+        localStorage.setItem('premiumActivatedAt', new Date().toISOString());
+
+        // 关闭支付模态框并立刻解锁功能，提升体感速度
+        closePaymentModal();
+        unlockPremiumFeatures();
+        // 成功提示分离，不阻塞解锁
+        showSuccessModal();
+    };
+
+    const check = async () => {
+        if (stopped) return;
+        if (Date.now() - startTs > MAX_MS) {
+            console.log('轮询超时，停止检查');
+            stopped = true;
+            return;
+        }
         try {
             const response = await fetch(`${PAYMENT_CONFIG.API_URL}/api/payment-status/${orderNo}`);
             const result = await response.json();
-            
             console.log('支付状态查询结果:', result);
-            
             if (result.success && result.status === 'success') {
-                console.log('✅ 支付成功！');
-                clearInterval(pollInterval);
-                
-                // 保存支付状态
-                localStorage.setItem('isPremiumUser', 'true');
-                localStorage.setItem('premiumType', 'paid'); // 标记为付费用户
-                localStorage.setItem('premiumOrderNo', orderNo);
-                localStorage.setItem('premiumActivatedAt', new Date().toISOString());
-                
-                // 关闭支付模态框
-                closePaymentModal();
-                
-                // 显示成功提示
-                showSuccessModal();
-                
-                // 解锁功能
-                unlockPremiumFeatures();
+                finishSuccess();
+                return;
             }
-            
         } catch (error) {
             console.error('查询支付状态失败:', error);
         }
-    }, 3000); // 每3秒查询一次
-    
-    // 5分钟后停止轮询
-    setTimeout(() => {
-        if (pollInterval) {
-            console.log('轮询超时，停止检查');
-            clearInterval(pollInterval);
-        }
-    }, 5 * 60 * 1000);
+        attempt++;
+        const next = attempt < 10 ? 1000 : attempt < 30 ? 2000 : 3000;
+        pollInterval = setTimeout(check, next);
+    };
+
+    // 立即触发第一次检查，避免固定3秒等待
+    check();
+
+    // 提供停止函数，关闭模态框时调用
+    stopPollingFn = () => { stopped = true; if (pollInterval) { clearTimeout(pollInterval); pollInterval = null; } };
 }
 
 // 显示成功模态框
