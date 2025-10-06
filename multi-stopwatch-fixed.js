@@ -884,18 +884,12 @@ class MultiStopwatchManager {
             }
         });
 
-        // 清空现有内容（除了no-timers元素）
-        Array.from(timersContainer.children).forEach(child => {
-            if (child.id !== 'no-timers') {
-                child.remove();
+        // 移除已不存在的活动卡片
+        Array.from(timersContainer.querySelectorAll('.timer-card')).forEach(card => {
+            const name = card.dataset.activity;
+            if (!activitySet.has(name)) {
+                card.remove();
             }
-        });
-
-        // 为每个活动创建计时器卡片
-        activities.forEach(activityName => {
-            const timer = this.getTimer(activityName);
-            const timerCard = this.createTimerCard(timer);
-            timersContainer.appendChild(timerCard);
         });
 
         // 启动实时更新
@@ -1543,7 +1537,60 @@ class MultiStopwatchManager {
         return colors[index];
     }
 
-    // 完成活动并重置计时器
+    // 本地快速保存活动记录（不阻塞UI）
+    completeActivityLocal(activityName, actualStartTime, actualEndTime, actualDurationMs) {
+        let completedActivities = [];
+        const existingData = localStorage.getItem('timeTrackerActivities');
+        if (existingData) {
+            try { completedActivities = JSON.parse(existingData); } catch (_) { completedActivities = []; }
+        }
+
+        const activityRecord = {
+            id: `stopwatch_${activityName}_${Date.now()}`,
+            activityName,
+            startTime: new Date(actualStartTime),
+            endTime: new Date(actualEndTime),
+            duration: Math.floor((actualDurationMs || 0) / (1000 * 60))
+        };
+
+        completedActivities.unshift(activityRecord);
+        localStorage.setItem('timeTrackerActivities', JSON.stringify(completedActivities));
+        this.saveCompatibleData();
+        console.log('✅ [本地] 活动记录已保存（不阻塞UI）');
+        return activityRecord;
+    }
+
+    // 后台同步活动记录到云端（可失败重试）
+    async syncActivityRecordToCloud(activityRecord) {
+        if (!this.supabase) { console.warn('⚠️ Supabase 未初始化，跳过活动同步'); return; }
+        try {
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) { console.warn('⚠️ 用户未登录，跳过活动同步'); return; }
+            const { error } = await this.supabase
+                .from('activities')
+                .insert({
+                    id: activityRecord.id,
+                    user_id: user.id,
+                    activity_name: activityRecord.activityName,
+                    start_time: new Date(activityRecord.startTime).toISOString(),
+                    end_time: new Date(activityRecord.endTime).toISOString(),
+                    duration_minutes: activityRecord.duration,
+                    note: '',
+                    color: this.getColorForActivity(activityRecord.activityName),
+                    created_at: new Date(activityRecord.startTime).toISOString(),
+                    updated_at: new Date().toISOString()
+                });
+            if (error) {
+                console.error('❌ [云端] 活动记录同步失败:', error);
+            } else {
+                console.log('✅ [云端] 活动记录已同步');
+            }
+        } catch (e) {
+            console.error('❌ [云端] 活动记录同步异常:', e);
+        }
+    }
+
+    // 完成活动并重置计时器（快速返回，云端异步）
     async completeActivityAndReset(activityName) {
         console.log(`\n🏁 ========== 开始完成活动 ==========`);
         console.log(`📌 活动名称: "${activityName}"`);
@@ -1567,57 +1614,28 @@ class MultiStopwatchManager {
             console.log(`⏹️ 已清除"${activityName}"的更新间隔`);
         }
         
-        // 如果计时器正在运行，先停止它
-        if (timer.isRunning) {
-            console.log(`⏸️ 停止正在运行的计时器: "${activityName}"`);
-            timer.elapsedTime = endTime - timer.startTime;
-            timer.isRunning = false;
+        // 快照当前持续时间，避免后续reset影响
+        const snapshotElapsed = timer.isRunning ? (endTime - timer.startTime) : (timer.elapsedTime || 0);
+        const actualStartTime = timer.startTime || (endTime - snapshotElapsed);
+        const actualEndTime = actualStartTime + snapshotElapsed;
+
+        // 本地快速保存（不等待云端）
+        if (snapshotElapsed > 0) {
+            console.log('💾 [本地] 准备快速保存活动记录（不阻塞UI）');
+            const record = this.completeActivityLocal(activityName, actualStartTime, actualEndTime, snapshotElapsed);
+            // 云端后台同步（不阻塞）
+            Promise.resolve().then(() => this.syncActivityRecordToCloud(record));
         }
-        
-        // 只有当计时器有时间记录时才保存
-        if (timer.elapsedTime > 0) {
-            // *** 关键修复：使用计时器的实际开始时间和实际持续时间 ***
-            const actualStartTime = timer.startTime || (endTime - timer.elapsedTime);
-            const actualEndTime = actualStartTime + timer.elapsedTime; // 开始时间 + 实际持续时间
-            
-            console.log(`💾 准备保存活动记录:`, {
-                activityName,
-                实际用时秒: Math.floor(timer.elapsedTime / 1000),
-                开始时间: new Date(actualStartTime).toLocaleString('zh-CN'),
-                结束时间: new Date(actualEndTime).toLocaleString('zh-CN')
-            });
-            
-            // 保存活动记录（异步等待）
-            await this.completeActivity(activityName, actualStartTime, actualEndTime);
-            console.log(`✅ 活动记录保存完成`);
-        }
-        
-        // *** 关键步骤：从云端删除计时器状态 ***
-        console.log(`🗑️ 准备从云端删除计时器状态...`);
-        await this.deleteTimerFromCloud(activityName);
-        
-        // 重置计时器（本地）
+
+        // 后台删除云端计时器状态（不阻塞）
+        Promise.resolve().then(() => this.deleteTimerFromCloud(activityName));
+
+        // 立即重置本地计时器并刷新UI（给用户“秒回”的丝滑体验）
         console.log(`🔄 重置本地计时器: "${activityName}"`);
         this.reset(activityName);
-        
-        // 显示完成提示
-        const minutes = Math.floor((timer.elapsedTime || 0) / (1000 * 60));
-        const seconds = Math.floor(((timer.elapsedTime || 0) % (1000 * 60)) / 1000);
-        
-        let timeMessage = '';
-        if (minutes > 0) {
-            timeMessage = `${minutes} 分钟 ${seconds} 秒`;
-        } else if (seconds > 0) {
-            timeMessage = `${seconds} 秒`;
-        } else {
-            timeMessage = '0 秒';
-        }
-        
-        console.log(`\u2705 \u6d3b\u52a8\"${activityName}\"已完\u6210，总用\u65f6: ${timeMessage}`);
-        console.log(`========== 完成活动结束 ==========\n`);
-        
-        // 使用页面内通知替代alert系统弹窗
-        // 此函数是由complete按钮调用，通知已由按钮处理函数显示
+        console.log('✅ 已快速重置并返回UI');
+        console.log(`========== 完成活动结束（云端在后台同步） ==========\n`);
+        // 通知已在外层按钮处理处显示
     }
 
     // 从云端删除计时器状态
