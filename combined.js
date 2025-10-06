@@ -50,6 +50,61 @@ let dateSelector;
 // 图表相关变量
 let timeChart = null;
 
+// 统计缓存，减少重复计算
+const __statsCache = {
+    version: 0,               // 活动数据修订号
+    activityStats: null,      // 所有活动统计缓存
+    activityStatsVersion: -1,
+    dailyDistribution: new Map(), // key: dateString -> {items,totalMinutes}
+    dailyVersion: new Map(),
+    annual: new Map(),        // key: `${year}|${filter}` -> organizedData
+    annualVersion: new Map()
+};
+
+function bumpStatsVersion() {
+    __statsCache.version++;
+    // 清理尺寸过大的细分缓存，避免内存增长
+    __statsCache.dailyDistribution.clear();
+    __statsCache.dailyVersion.clear();
+    __statsCache.annual.clear();
+    __statsCache.annualVersion.clear();
+}
+
+function getActivityStatsCached() {
+    if (__statsCache.activityStats && __statsCache.activityStatsVersion === __statsCache.version) {
+        return __statsCache.activityStats;
+    }
+    const stats = calculateActivityStats();
+    __statsCache.activityStats = stats;
+    __statsCache.activityStatsVersion = __statsCache.version;
+    return stats;
+}
+
+function getDailyDistributionCached(dateString) {
+    const v = __statsCache.version;
+    const lastV = __statsCache.dailyVersion.get(dateString);
+    if (lastV === v && __statsCache.dailyDistribution.has(dateString)) {
+        return __statsCache.dailyDistribution.get(dateString);
+    }
+    const data = processStatsData(getDailyActivities(dateString));
+    __statsCache.dailyDistribution.set(dateString, data);
+    __statsCache.dailyVersion.set(dateString, v);
+    return data;
+}
+
+function getAnnualOrganizedCached(year, filter) {
+    const key = `${year}|${filter}`;
+    const v = __statsCache.version;
+    if (__statsCache.annualVersion.get(key) === v && __statsCache.annual.has(key)) {
+        return __statsCache.annual.get(key);
+    }
+    const yearActivities = getActivitiesByYear(year);
+    const data = organizeActivitiesByDate(yearActivities, filter);
+    __statsCache.annual.set(key, data);
+    __statsCache.annualVersion.set(key, v);
+    return data;
+}
+
 // 按需加载 Chart.js，避免阻塞首屏
 let __chartLoadingPromise = null;
 function ensureChartJS() {
@@ -234,17 +289,9 @@ function initApp() {
     // 初始化年度统计表
     initAnnualTable();
     
-    // 初始显示统计延后到空闲时间，避免阻塞首屏
-    const scheduleInitStats = () => {
-        try {
-            updateStatsView(STATS_VIEW.DAILY_DISTRIBUTION);
-        } catch (_) {}
-    };
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(scheduleInitStats, { timeout: 1500 });
-    } else {
-        setTimeout(scheduleInitStats, 800);
-    }
+    // 预加载 Chart.js（空闲时），不触发统计计算，保证首次打开统计更快
+    const prefetchCharts = () => { try { ensureChartJS(); } catch (_) {} };
+    if ('requestIdleCallback' in window) requestIdleCallback(prefetchCharts, { timeout: 1500 }); else setTimeout(prefetchCharts, 800);
 }
 
 // 初始化用户下拉菜单
@@ -1037,11 +1084,11 @@ function showDailyDistribution(selectedDate) {
     // 格式化日期为YYYY-MM-DD格式，用于比较
     const dateString = selectedDate.toISOString().split('T')[0];
     
-    // 获取所选日期的活动
-    const dailyActivities = getDailyActivities(dateString);
+    // 获取缓存后的统计
+    const statsData = getDailyDistributionCached(dateString);
     
     // 如果没有活动记录，显示提示信息
-    if (dailyActivities.length === 0) {
+    if (!statsData.items || statsData.items.length === 0) {
         noStatsElement.classList.remove('hidden');
         statsSummaryElement.innerHTML = '';
         
@@ -1057,9 +1104,6 @@ function showDailyDistribution(selectedDate) {
     // 隐藏提示信息
     noStatsElement.classList.add('hidden');
     
-    // 处理数据
-    const statsData = processStatsData(dailyActivities);
-    
     // 更新图表 - 饼图
     updatePieChart(statsData);
     
@@ -1069,7 +1113,7 @@ function showDailyDistribution(selectedDate) {
 
 // 显示特定活动的每日统计
 function showActivityDailyStats(activityName) {
-    const activityStats = calculateActivityStats();
+    const activityStats = getActivityStatsCached();
     
     if (!activityStats[activityName]) {
         noStatsElement.classList.remove('hidden');
@@ -1101,7 +1145,7 @@ function showActivityDailyStats(activityName) {
 
 // 显示所有活动的累计统计
 function showActivityTotalStats() {
-    const activityStats = calculateActivityStats();
+    const activityStats = getActivityStatsCached();
     const activityNames = Object.keys(activityStats);
     
     if (activityNames.length === 0) {
@@ -1178,12 +1222,13 @@ function processStatsData(activities) {
         activityGroups[name].totalMinutes += activity.duration;
     });
     
-    // 转换为数组并计算百分比
+    // 转换为数组并计算百分比（避免除0）
     const result = Object.values(activityGroups);
     const totalMinutes = result.reduce((sum, item) => sum + item.totalMinutes, 0);
     
     result.forEach(item => {
-        item.percentage = Math.round((item.totalMinutes / totalMinutes) * 100);
+        const pct = totalMinutes > 0 ? Math.round((item.totalMinutes / totalMinutes) * 100) : 0;
+        item.percentage = pct;
     });
     
     // 按时间降序排序
@@ -1322,78 +1367,73 @@ function updateBarChart(labels, data, backgroundColor, activityName) {
 
 // 更新统计摘要
 function updateStatsSummary(statsData) {
-    // 清空摘要区域
+    // 清空并使用 DocumentFragment 减少重排
     statsSummaryElement.innerHTML = '';
-    
-    // 添加总时间
+    const frag = document.createDocumentFragment();
+
     const totalElement = document.createElement('div');
     totalElement.className = 'stats-total';
     totalElement.textContent = `总计: ${formatDuration(statsData.totalMinutes)}`;
-    statsSummaryElement.appendChild(totalElement);
-    
-    // 添加各活动详情
+    frag.appendChild(totalElement);
+
     statsData.items.forEach(item => {
         const itemElement = document.createElement('div');
         itemElement.className = 'stats-summary-item';
-        
+
         const nameElement = document.createElement('div');
         nameElement.className = 'stats-summary-item-name';
-        
+
         const colorIndicator = document.createElement('span');
         colorIndicator.className = 'color-indicator';
         colorIndicator.style.backgroundColor = item.color;
-        
+
         nameElement.appendChild(colorIndicator);
         nameElement.appendChild(document.createTextNode(item.name));
-        
+
         const detailElement = document.createElement('div');
         detailElement.textContent = `${formatDuration(item.totalMinutes)} (${item.percentage}%)`;
-        
+
         itemElement.appendChild(nameElement);
         itemElement.appendChild(detailElement);
-        
-        statsSummaryElement.appendChild(itemElement);
+
+        frag.appendChild(itemElement);
     });
+
+    statsSummaryElement.appendChild(frag);
 }
 
 // 更新活动每日统计摘要
 function updateActivityDailySummary(activityName, dailyData, totalMinutes) {
-    // 清空摘要区域
     statsSummaryElement.innerHTML = '';
-    
-    // 添加总时间
+    const frag = document.createDocumentFragment();
+
     const totalElement = document.createElement('div');
     totalElement.className = 'stats-total';
     totalElement.textContent = `${activityName} 总计: ${formatDuration(totalMinutes)}`;
-    statsSummaryElement.appendChild(totalElement);
-    
-    // 添加每日详情
+    frag.appendChild(totalElement);
+
     const dates = Object.keys(dailyData).sort().reverse();
-    
     dates.forEach(date => {
         const minutes = dailyData[date];
-        
         const itemElement = document.createElement('div');
         itemElement.className = 'stats-summary-item';
-        
         const dateElement = document.createElement('div');
         dateElement.textContent = date;
-        
         const durationElement = document.createElement('div');
         durationElement.textContent = formatDuration(minutes);
-        
         itemElement.appendChild(dateElement);
         itemElement.appendChild(durationElement);
-        
-        statsSummaryElement.appendChild(itemElement);
+        frag.appendChild(itemElement);
     });
+
+    statsSummaryElement.appendChild(frag);
 }
 
 // 更新活动累计统计摘要
 function updateActivityTotalSummary(activityStats) {
-    // 清空摘要区域
     statsSummaryElement.innerHTML = '';
-    
+    const frag = document.createDocumentFragment();
+
     // 计算总时间
     let totalMinutes = 0;
     Object.values(activityStats).forEach(stat => {
@@ -1404,7 +1444,7 @@ function updateActivityTotalSummary(activityStats) {
     const totalElement = document.createElement('div');
     totalElement.className = 'stats-total';
     totalElement.textContent = `所有活动总计: ${formatDuration(totalMinutes)}`;
-    statsSummaryElement.appendChild(totalElement);
+    frag.appendChild(totalElement);
     
     // 添加各活动详情
     const activityNames = Object.keys(activityStats);
@@ -1433,8 +1473,10 @@ function updateActivityTotalSummary(activityStats) {
         itemElement.appendChild(nameElement);
         itemElement.appendChild(detailElement);
         
-        statsSummaryElement.appendChild(itemElement);
+        frag.appendChild(itemElement);
     });
+
+    statsSummaryElement.appendChild(frag);
 }
 
 // 年度统计表功能
@@ -1559,10 +1601,8 @@ function populateAnnualTable(year, activityFilter = 'all') {
     clearTableCells();
     
     // 获取选定年份的活动数据
-    const yearActivities = getActivitiesByYear(year);
-    
-    // 按日期组织活动数据
-    const organizedData = organizeActivitiesByDate(yearActivities, activityFilter);
+    // 使用缓存后的组织数据
+    const organizedData = getAnnualOrganizedCached(year, activityFilter);
     
     // 填充表格单元格
     fillTableCells(organizedData);
