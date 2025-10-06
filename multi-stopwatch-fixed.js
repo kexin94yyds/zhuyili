@@ -987,7 +987,7 @@ class MultiStopwatchManager {
     }
 
     // 处理按钮操作
-    handleButtonAction(action, timer) {
+    async handleButtonAction(action, timer) {
         console.log(`🔘 主界面按钮操作: ${action} - ${timer.name}`);
         this.__d('handleButtonAction()', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: timer.isRunning, elapsed: timer.elapsedTime });
         // 在按钮操作期间短暂开启护栏，防止DOM重绘引发的误点击
@@ -1018,10 +1018,19 @@ class MultiStopwatchManager {
                 break;
                 
             case 'complete':
-                // 直接完成，无需确认对话框，但显示绿色通知
-                this.completeActivityAndReset(timer.name);
+                // 直接完成：先反馈，再等待完整保存与重置
                 this.showNotification(`"${timer.name}" 活动已完成并保存`, 'success');
-                break;
+                await this.completeActivityAndReset(timer.name);
+                // 完成后立即刷新UI并解禁按钮
+                this.startRealTimeUpdate();
+                this.updateMainPageUI();
+                if (card) {
+                    const buttons = card.querySelectorAll('.timer-btn');
+                    buttons.forEach(btn => btn.disabled = false);
+                }
+                console.log(`✅ 主界面操作"${action}"完成，UI已更新`);
+                this.__d('handleButtonAction() done', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: this.getTimer(timer.name)?.isRunning });
+                return; // 已完成处理，避免进入通用延迟逻辑
                 
             case 'reset':
                 if (confirm(`确定要重置\"${timer.name}\"的计时器吗？这将清除当前计时数据。`)) {
@@ -1052,7 +1061,7 @@ class MultiStopwatchManager {
             
             console.log(`✅ 主界面操作"${action}"完成，UI已更新`);
             this.__d('handleButtonAction() done', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: this.getTimer(timer.name)?.isRunning });
-        }, 300); // 增加延迟时间，确保状态稳定
+        }, 300); // 增加延迟时间，确保状态稳定（complete 分支已提前 return）
     }
 
     // 显示通知
