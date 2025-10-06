@@ -587,7 +587,7 @@ class MultiStopwatchManager {
     }
 
     // 处理按钮操作
-    handleButtonAction(action, timer) {
+    async handleButtonAction(action, timer) {
         console.log(`🔘 主界面按钮操作: ${action} - ${timer.name}`);
         this.__d('handleButtonAction()', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: timer.isRunning, elapsed: timer.elapsedTime });
         // 在按钮操作期间短暂开启护栏，防止DOM重绘引发的误点击
@@ -619,10 +619,24 @@ class MultiStopwatchManager {
                 
             case 'complete':
                 if (confirm(`确定要完成"${timer.name}"活动吗？这将保存活动记录并重置计时器。`)) {
-                    this.completeActivityAndReset(timer.name);
+                    // 等待完成与重置彻底完成，避免需要点击两次
+                    await this.completeActivityAndReset(timer.name);
                     this.showNotification(`"${timer.name}" 活动已完成并保存`);
+                    // 完成后立即刷新UI并重新启用按钮
+                    this.startRealTimeUpdate();
+                    this.updateMainPageUI();
+                    if (card) {
+                        const buttons = card.querySelectorAll('.timer-btn');
+                        buttons.forEach(btn => btn.disabled = false);
+                    }
+                } else {
+                    // 用户取消操作，立即恢复按钮可用
+                    if (card) {
+                        const buttons = card.querySelectorAll('.timer-btn');
+                        buttons.forEach(btn => btn.disabled = false);
+                    }
                 }
-                break;
+                return; // 已手动处理后续刷新与解禁，这里直接返回
                 
             case 'reset':
                 if (confirm(`确定要重置"${timer.name}"的计时器吗？这将清除当前计时数据。`)) {
