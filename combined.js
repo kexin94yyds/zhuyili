@@ -829,6 +829,8 @@ async function loadData() {
     } else {
         console.log('⚠️ 本地没有活动记录数据');
     }
+    // 本地数据变更后提升统计修订号
+    bumpStatsVersion();
     
     // 后台加载 Supabase（不阻塞首屏）
     Promise.resolve().then(async () => {
