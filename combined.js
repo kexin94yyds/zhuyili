@@ -50,6 +50,77 @@ let dateSelector;
 // 图表相关变量
 let timeChart = null;
 
+// 统计缓存，减少重复计算
+const __statsCache = {
+    version: 0,               // 活动数据修订号
+    activityStats: null,      // 所有活动统计缓存
+    activityStatsVersion: -1,
+    dailyDistribution: new Map(), // key: dateString -> {items,totalMinutes}
+    dailyVersion: new Map(),
+    annual: new Map(),        // key: `${year}|${filter}` -> organizedData
+    annualVersion: new Map()
+};
+
+function bumpStatsVersion() {
+    __statsCache.version++;
+    // 清理尺寸过大的细分缓存，避免内存增长
+    __statsCache.dailyDistribution.clear();
+    __statsCache.dailyVersion.clear();
+    __statsCache.annual.clear();
+    __statsCache.annualVersion.clear();
+}
+
+function getActivityStatsCached() {
+    if (__statsCache.activityStats && __statsCache.activityStatsVersion === __statsCache.version) {
+        return __statsCache.activityStats;
+    }
+    const stats = calculateActivityStats();
+    __statsCache.activityStats = stats;
+    __statsCache.activityStatsVersion = __statsCache.version;
+    return stats;
+}
+
+function getDailyDistributionCached(dateString) {
+    const v = __statsCache.version;
+    const lastV = __statsCache.dailyVersion.get(dateString);
+    if (lastV === v && __statsCache.dailyDistribution.has(dateString)) {
+        return __statsCache.dailyDistribution.get(dateString);
+    }
+    const data = processStatsData(getDailyActivities(dateString));
+    __statsCache.dailyDistribution.set(dateString, data);
+    __statsCache.dailyVersion.set(dateString, v);
+    return data;
+}
+
+function getAnnualOrganizedCached(year, filter) {
+    const key = `${year}|${filter}`;
+    const v = __statsCache.version;
+    if (__statsCache.annualVersion.get(key) === v && __statsCache.annual.has(key)) {
+        return __statsCache.annual.get(key);
+    }
+    const yearActivities = getActivitiesByYear(year);
+    const data = organizeActivitiesByDate(yearActivities, filter);
+    __statsCache.annual.set(key, data);
+    __statsCache.annualVersion.set(key, v);
+    return data;
+}
+
+// 按需加载 Chart.js，避免阻塞首屏
+let __chartLoadingPromise = null;
+function ensureChartJS() {
+    if (window.Chart) return Promise.resolve();
+    if (__chartLoadingPromise) return __chartLoadingPromise;
+    __chartLoadingPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = (e) => reject(e);
+        document.head.appendChild(s);
+    });
+    return __chartLoadingPromise;
+}
+
 // 初始化 Supabase 客户端
 function initSupabase() {
     try {
@@ -218,8 +289,9 @@ function initApp() {
     // 初始化年度统计表
     initAnnualTable();
     
-    // 初始显示今日统计
-    showStatistics();
+    // 预加载 Chart.js（空闲时），不触发统计计算，保证首次打开统计更快
+    const prefetchCharts = () => { try { ensureChartJS(); } catch (_) {} };
+    if ('requestIdleCallback' in window) requestIdleCallback(prefetchCharts, { timeout: 1500 }); else setTimeout(prefetchCharts, 800);
 }
 
 // 初始化用户下拉菜单
@@ -721,8 +793,11 @@ async function saveData() {
     }
 }
 
-// 从本地存储和 Supabase 加载数据
+// 从本地存储快速加载，并在后台合并 Supabase（加速首屏）
 async function loadData() {
+    console.log('\n📂 ========== 开始加载活动记录 ==========');
+    console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+    
     // 首先从本地存储加载
     const dataString = localStorage.getItem('timeTrackerData');
     
@@ -737,6 +812,8 @@ async function loadData() {
                 endTime: activity.endTime ? new Date(activity.endTime) : null
             }));
             
+            console.log(`📦 从本地加载了 ${activities.length} 条活动记录`);
+            
             if (data.currentActivity) {
                 currentActivity = {
                     ...data.currentActivity,
@@ -745,39 +822,35 @@ async function loadData() {
                 };
             }
         } catch (error) {
-            console.error('加载本地数据失败:', error);
+            console.error('❌ 加载本地数据失败:', error);
             activities = [];
             currentActivity = null;
         }
+    } else {
+        console.log('⚠️ 本地没有活动记录数据');
     }
+    // 本地数据变更后提升统计修订号
+    bumpStatsVersion();
     
-    // 如果 Supabase 连接成功，尝试从云端加载最新数据
-    if (supabase && window.supabaseClient && window.supabaseClient.isConnected()) {
+    // 后台加载 Supabase（不阻塞首屏）
+    Promise.resolve().then(async () => {
         try {
-            console.log('🔄 正在从 Supabase 加载数据...');
-            
-            // 获取当前用户
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                console.warn('用户未登录，跳过云端数据加载');
+            console.log('☁️(bg) 检查 Supabase 连接状态...');
+            if (!(supabase && window.supabaseClient && window.supabaseClient.isConnected())) {
+                console.warn('⚠️(bg) 未连接，跳过云端加载');
                 return;
             }
-            
-            // 加载活动记录（只加载当前用户的数据）
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) { console.warn('⚠️(bg) 未登录，跳过云端加载'); return; }
+
+            // 活动记录
             const { data: supabaseActivities, error: activitiesError } = await supabase
                 .from('activities')
                 .select('*')
                 .eq('user_id', user.id)
                 .order('start_time', { ascending: false });
-            
-            if (activitiesError) {
-                console.error('❌ 从 Supabase 加载活动记录失败:', activitiesError);
-                updateSyncStatus('error', '❌ 加载失败');
-            } else if (supabaseActivities && supabaseActivities.length > 0) {
-                console.log(`✅ 从 Supabase 加载了 ${supabaseActivities.length} 条活动记录`);
-                updateSyncStatus('success', `✅ 已加载 ${supabaseActivities.length} 条记录`);
-                
-                // 转换数据格式
+            if (!activitiesError && supabaseActivities) {
                 const cloudActivities = supabaseActivities.map(activity => ({
                     id: activity.id,
                     activityName: activity.activity_name,
@@ -787,48 +860,42 @@ async function loadData() {
                     note: activity.note || '',
                     color: activity.color || getColorForActivity(activity.activity_name)
                 }));
-                
-                // 合并数据（云端数据优先）
-                if (activities.length === 0) {
-                    activities = cloudActivities;
-                } else {
-                    // 简单的合并策略：保留本地数据，添加云端新数据
-                    const localIds = new Set(activities.map(a => a.id));
-                    const newCloudActivities = cloudActivities.filter(a => !localIds.has(a.id));
+                const localIds = new Set(activities.map(a => a.id));
+                const newCloudActivities = cloudActivities.filter(a => !localIds.has(a.id));
+                if (newCloudActivities.length) {
                     activities = [...activities, ...newCloudActivities];
+                    updateActivityList();
                 }
             }
-            
-            // 加载当前活动（只加载当前用户的数据）
-            const { data: supabaseCurrent, error: currentError } = await supabase
+
+            // 当前活动
+            const { data: supabaseCurrent } = await supabase
                 .from('current_activities')
                 .select('*')
                 .eq('user_id', user.id)
                 .eq('state', 'running')
                 .order('last_update', { ascending: false })
                 .limit(1);
-            
-            if (currentError) {
-                console.error('❌ 从 Supabase 加载当前活动失败:', currentError);
-            } else if (supabaseCurrent && supabaseCurrent.length > 0) {
-                console.log('✅ 从 Supabase 加载了当前活动');
-                
+            if (supabaseCurrent && supabaseCurrent.length > 0 && !currentActivity) {
                 const cloudCurrent = supabaseCurrent[0];
-                if (!currentActivity) {
-                    currentActivity = {
-                        id: cloudCurrent.id,
-                        activityName: cloudCurrent.activity_name,
-                        startTime: new Date(cloudCurrent.start_time),
-                        endTime: null,
-                        duration: 0
-                    };
-                }
+                currentActivity = {
+                    id: cloudCurrent.id,
+                    activityName: cloudCurrent.activity_name,
+                    startTime: new Date(cloudCurrent.start_time),
+                    endTime: null,
+                    duration: 0
+                };
+                updateCurrentActivityUI();
+                startDurationTimer();
             }
-            
-        } catch (error) {
-            console.error('❌ 从 Supabase 加载数据失败:', error);
+            console.log('✅(bg) 云端数据加载合并完成');
+        } catch (e) {
+            console.error('❌(bg) 云端加载异常:', e);
         }
-    }
+    });
+
+    console.log(`========== 活动记录加载结束 (本地优先，云端后台) ==========`);
+    console.log(`📊 总计: ${activities.length}条活动记录\n`);
 }
 
 // 工具函数
@@ -876,26 +943,76 @@ function formatDuration(minutes) {
     return `${hours} 小时 ${remainingMinutes} 分钟`;
 }
 
-// 根据活动名称生成颜色
+// 根据活动名称生成颜色（优化版，确保每个活动都有独特颜色）
 function getColorForActivity(activityName) {
-    // 简单的哈希函数生成颜色
-    let hash = 0;
-    for (let i = 0; i < activityName.length; i++) {
-        hash = activityName.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    
+    // 使用更多易区分的颜色，增加颜色池
     const colors = [
-        '#3498db', // 蓝色
-        '#2ecc71', // 绿色
-        '#e74c3c', // 红色
-        '#f39c12', // 橙色
-        '#9b59b6', // 紫色
-        '#1abc9c', // 青色
-        '#d35400', // 深橙色
-        '#2c3e50'  // 深蓝色
+        // 红色系 - 热情与能量
+        '#FF0000', // 纯红
+        '#DC143C', // 深红
+        '#FF1493', // 深粉红
+        '#FF69B4', // 热粉红
+        
+        // 橙色系 - 温暖与活力
+        '#FF4500', // 橙红色
+        '#FF6347', // 番茄色
+        '#FF7F50', // 珊瑚色
+        '#FFA500', // 橙色
+        
+        // 黄色系 - 明亮与希望
+        '#FFD700', // 金色
+        '#FFFF00', // 黄色
+        '#FFEB3B', // 明黄
+        '#FFC107', // 琥珀色
+        
+        // 绿色系 - 生机与成长
+        '#00FF00', // 鲜绿
+        '#32CD32', // 酸橙绿
+        '#00FA9A', // 中春绿
+        '#00CED1', // 深绿松色
+        
+        // 青色系 - 清新与冷静
+        '#00FFFF', // 青色
+        '#00BFFF', // 深天蓝
+        '#1E90FF', // 闪电蓝
+        '#4169E1', // 皇家蓝
+        
+        // 蓝色系 - 稳重与信任
+        '#0000FF', // 纯蓝
+        '#0000CD', // 中蓝
+        '#191970', // 午夜蓝
+        '#4682B4', // 钢蓝
+        
+        // 紫色系 - 神秘与优雅
+        '#9370DB', // 中紫色
+        '#8B00FF', // 紫罗兰色
+        '#9932CC', // 暗兰色
+        '#BA55D3', // 中兰花紫
+        
+        // 特殊色 - 丰富视觉
+        '#FF00FF', // 品红
+        '#00FF7F', // 春绿
+        '#FFB6C1', // 浅粉红
+        '#20B2AA', // 浅海洋绿
+        
+        // 白色系 - 纯洁与简洁
+        '#FFFFFF', // 纯白
+        '#F5F5F5', // 烟白
+        '#E0E0E0', // 浅灰
+        '#C0C0C0'  // 银色
     ];
     
-    return colors[Math.abs(hash) % colors.length];
+    // 使用更好的哈希算法，减少冲突
+    let hash = 0;
+    for (let i = 0; i < activityName.length; i++) {
+        const char = activityName.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    // 使用绝对值并确保正数
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
 }
 
 // 更新统计视图
@@ -938,21 +1055,24 @@ function updateStatsView(viewType, activityName = null) {
 }
 
 // 显示统计数据
-function showStatistics() {
+async function showStatistics() {
     const selectedDate = statsDateInput.valueAsDate;
     if (!selectedDate) return;
     
     // 根据当前视图类型显示不同的统计数据
     switch (currentStatsView) {
         case STATS_VIEW.DAILY_DISTRIBUTION:
+            await ensureChartJS();
             showDailyDistribution(selectedDate);
             break;
         case STATS_VIEW.ACTIVITY_DAILY:
             if (selectedActivity) {
+                await ensureChartJS();
                 showActivityDailyStats(selectedActivity);
             }
             break;
         case STATS_VIEW.ACTIVITY_TOTAL:
+            await ensureChartJS();
             showActivityTotalStats();
             break;
         case STATS_VIEW.ANNUAL_TABLE:
@@ -966,11 +1086,11 @@ function showDailyDistribution(selectedDate) {
     // 格式化日期为YYYY-MM-DD格式，用于比较
     const dateString = selectedDate.toISOString().split('T')[0];
     
-    // 获取所选日期的活动
-    const dailyActivities = getDailyActivities(dateString);
+    // 获取缓存后的统计
+    const statsData = getDailyDistributionCached(dateString);
     
     // 如果没有活动记录，显示提示信息
-    if (dailyActivities.length === 0) {
+    if (!statsData.items || statsData.items.length === 0) {
         noStatsElement.classList.remove('hidden');
         statsSummaryElement.innerHTML = '';
         
@@ -986,9 +1106,6 @@ function showDailyDistribution(selectedDate) {
     // 隐藏提示信息
     noStatsElement.classList.add('hidden');
     
-    // 处理数据
-    const statsData = processStatsData(dailyActivities);
-    
     // 更新图表 - 饼图
     updatePieChart(statsData);
     
@@ -998,7 +1115,7 @@ function showDailyDistribution(selectedDate) {
 
 // 显示特定活动的每日统计
 function showActivityDailyStats(activityName) {
-    const activityStats = calculateActivityStats();
+    const activityStats = getActivityStatsCached();
     
     if (!activityStats[activityName]) {
         noStatsElement.classList.remove('hidden');
@@ -1030,7 +1147,7 @@ function showActivityDailyStats(activityName) {
 
 // 显示所有活动的累计统计
 function showActivityTotalStats() {
-    const activityStats = calculateActivityStats();
+    const activityStats = getActivityStatsCached();
     const activityNames = Object.keys(activityStats);
     
     if (activityNames.length === 0) {
@@ -1107,12 +1224,13 @@ function processStatsData(activities) {
         activityGroups[name].totalMinutes += activity.duration;
     });
     
-    // 转换为数组并计算百分比
+    // 转换为数组并计算百分比（避免除0）
     const result = Object.values(activityGroups);
     const totalMinutes = result.reduce((sum, item) => sum + item.totalMinutes, 0);
     
     result.forEach(item => {
-        item.percentage = Math.round((item.totalMinutes / totalMinutes) * 100);
+        const pct = totalMinutes > 0 ? Math.round((item.totalMinutes / totalMinutes) * 100) : 0;
+        item.percentage = pct;
     });
     
     // 按时间降序排序
@@ -1251,78 +1369,73 @@ function updateBarChart(labels, data, backgroundColor, activityName) {
 
 // 更新统计摘要
 function updateStatsSummary(statsData) {
-    // 清空摘要区域
+    // 清空并使用 DocumentFragment 减少重排
     statsSummaryElement.innerHTML = '';
-    
-    // 添加总时间
+    const frag = document.createDocumentFragment();
+
     const totalElement = document.createElement('div');
     totalElement.className = 'stats-total';
     totalElement.textContent = `总计: ${formatDuration(statsData.totalMinutes)}`;
-    statsSummaryElement.appendChild(totalElement);
-    
-    // 添加各活动详情
+    frag.appendChild(totalElement);
+
     statsData.items.forEach(item => {
         const itemElement = document.createElement('div');
         itemElement.className = 'stats-summary-item';
-        
+
         const nameElement = document.createElement('div');
         nameElement.className = 'stats-summary-item-name';
-        
+
         const colorIndicator = document.createElement('span');
         colorIndicator.className = 'color-indicator';
         colorIndicator.style.backgroundColor = item.color;
-        
+
         nameElement.appendChild(colorIndicator);
         nameElement.appendChild(document.createTextNode(item.name));
-        
+
         const detailElement = document.createElement('div');
         detailElement.textContent = `${formatDuration(item.totalMinutes)} (${item.percentage}%)`;
-        
+
         itemElement.appendChild(nameElement);
         itemElement.appendChild(detailElement);
-        
-        statsSummaryElement.appendChild(itemElement);
+
+        frag.appendChild(itemElement);
     });
+
+    statsSummaryElement.appendChild(frag);
 }
 
 // 更新活动每日统计摘要
 function updateActivityDailySummary(activityName, dailyData, totalMinutes) {
-    // 清空摘要区域
     statsSummaryElement.innerHTML = '';
-    
-    // 添加总时间
+    const frag = document.createDocumentFragment();
+
     const totalElement = document.createElement('div');
     totalElement.className = 'stats-total';
     totalElement.textContent = `${activityName} 总计: ${formatDuration(totalMinutes)}`;
-    statsSummaryElement.appendChild(totalElement);
-    
-    // 添加每日详情
+    frag.appendChild(totalElement);
+
     const dates = Object.keys(dailyData).sort().reverse();
-    
     dates.forEach(date => {
         const minutes = dailyData[date];
-        
         const itemElement = document.createElement('div');
         itemElement.className = 'stats-summary-item';
-        
         const dateElement = document.createElement('div');
         dateElement.textContent = date;
-        
         const durationElement = document.createElement('div');
         durationElement.textContent = formatDuration(minutes);
-        
         itemElement.appendChild(dateElement);
         itemElement.appendChild(durationElement);
-        
-        statsSummaryElement.appendChild(itemElement);
+        frag.appendChild(itemElement);
     });
+
+    statsSummaryElement.appendChild(frag);
 }
 
 // 更新活动累计统计摘要
 function updateActivityTotalSummary(activityStats) {
-    // 清空摘要区域
     statsSummaryElement.innerHTML = '';
-    
+    const frag = document.createDocumentFragment();
+
     // 计算总时间
     let totalMinutes = 0;
     Object.values(activityStats).forEach(stat => {
@@ -1333,7 +1446,7 @@ function updateActivityTotalSummary(activityStats) {
     const totalElement = document.createElement('div');
     totalElement.className = 'stats-total';
     totalElement.textContent = `所有活动总计: ${formatDuration(totalMinutes)}`;
-    statsSummaryElement.appendChild(totalElement);
+    frag.appendChild(totalElement);
     
     // 添加各活动详情
     const activityNames = Object.keys(activityStats);
@@ -1362,8 +1475,10 @@ function updateActivityTotalSummary(activityStats) {
         itemElement.appendChild(nameElement);
         itemElement.appendChild(detailElement);
         
-        statsSummaryElement.appendChild(itemElement);
+        frag.appendChild(itemElement);
     });
+
+    statsSummaryElement.appendChild(frag);
 }
 
 // 年度统计表功能
@@ -1488,10 +1603,8 @@ function populateAnnualTable(year, activityFilter = 'all') {
     clearTableCells();
     
     // 获取选定年份的活动数据
-    const yearActivities = getActivitiesByYear(year);
-    
-    // 按日期组织活动数据
-    const organizedData = organizeActivitiesByDate(yearActivities, activityFilter);
+    // 使用缓存后的组织数据
+    const organizedData = getAnnualOrganizedCached(year, activityFilter);
     
     // 填充表格单元格
     fillTableCells(organizedData);

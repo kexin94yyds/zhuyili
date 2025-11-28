@@ -33,10 +33,9 @@
     
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="annual_table_styles.css">
-    <!-- 引入Chart.js库 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- 引入二维码库 -->
-    <script src="qrcode.min.js"></script>
+    <!-- Chart.js 改为按需加载，避免阻塞首屏 -->
+    <!-- 引入二维码库（defer，避免阻塞） -->
+    <script src="qrcode.min.js" defer></script>
     <style>
         html, body {
             margin: 0;
@@ -323,13 +322,291 @@
             font-weight: 600;
             margin-top: 10px;
         }
+        
+        /* ========== 视图切换样式 ========== */
+        .view-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            background-color: #0A0A0A;
+        }
+        
+        .view.hidden {
+            transform: translateX(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .view.visible {
+            transform: translateX(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        /* 主视图样式调整 */
+        #main-view {
+            overflow-y: auto;
+            height: 100vh;
+        }
+        
+        /* 计时器详情视图样式 */
+        #timer-detail-view {
+            display: flex;
+            flex-direction: column;
+            background-color: #0A0A0A;
+            color: #FFFFFF;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .timer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+            background: #0A0A0A;
+        }
+        
+        .timer-activity-title {
+            font-family: 'Orbitron', 'Rajdhani', 'Exo 2', 'Titillium Web', 'Source Sans Pro', sans-serif;
+            font-size: 24px;
+            font-weight: 500;
+            color: #FFFFFF;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+        }
+        
+        .timer-header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .timer-back-btn, .timer-switch-btn {
+            background: #333;
+            border: none;
+            color: #FFFFFF;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .timer-back-btn:hover, .timer-switch-btn:hover {
+            background: #555;
+        }
+        
+        .timer-main-display {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            min-height: 300px;
+        }
+        
+        .timer-time-display {
+            font-size: 4rem;
+            font-weight: 300;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            color: #FFFFFF;
+            text-align: center;
+            margin-bottom: 40px;
+            letter-spacing: 0.1em;
+        }
+        
+        .timer-button-area {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 40px;
+            justify-content: center;
+            flex-wrap: wrap;
+            /* 与主页按钮区域保持一致 */
+            align-items: center;
+        }
+        
+        .timer-control-btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 120px;
+            height: 50px;
+        }
+        
+        .timer-control-btn.primary {
+            background-color: #4CAF50;
+            color: #FFFFFF;
+        }
+        
+        .timer-control-btn.primary:hover {
+            background-color: #45a049;
+        }
+        
+        .timer-control-btn.secondary {
+            background-color: #666;
+            color: #FFFFFF;
+        }
+        
+        .timer-control-btn.secondary:hover {
+            background-color: #777;
+        }
+        
+        .timer-control-btn.danger {
+            background-color: #f44336;
+            color: #FFFFFF;
+        }
+        
+        .timer-control-btn.danger:hover {
+            background-color: #da190b;
+        }
+        
+        .timer-lap-container {
+            flex: 1;
+            background-color: #111;
+            border-radius: 20px 20px 0 0;
+            padding: 20px;
+            overflow-y: auto;
+            margin: 0 20px 20px 20px;
+            min-height: 200px;
+        }
+        
+        .timer-lap-header {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px 15px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #999;
+        }
+        
+        .timer-lap-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 20px;
+            border-bottom: 1px solid #222;
+            align-items: center;
+        }
+        
+        .timer-lap-item:last-child {
+            border-bottom: none;
+        }
+        
+        .timer-lap-number {
+            font-weight: bold;
+            color: #FFFFFF;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        
+        .status-indicator.status-running {
+            background-color: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-indicator.status-paused {
+            background-color: #FF9800;
+        }
+        
+        .status-indicator.status-stopped {
+            background-color: #666;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* 计时器详情页面按钮放大样式 - 完全继承主页按钮样式 */
+        .timer-btn-large {
+            /* 放大尺寸 */
+            padding: 20px 40px;
+            font-size: 18px;
+            min-width: 150px;
+            min-height: 60px;
+            /* 增强视觉效果 */
+            border-radius: 16px;
+            font-weight: 600;
+        }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .timer-time-display {
+                font-size: 3rem;
+            }
+            
+            .timer-button-area {
+                gap: 15px;
+            }
+            
+            .timer-control-btn {
+                min-width: 100px;
+                height: 45px;
+                font-size: 14px;
+                padding: 10px 20px;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .timer-button-area {
+                gap: 10px;
+            }
+            
+            .timer-control-btn {
+                min-width: 90px;
+                font-size: 14px;
+                padding: 12px 20px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .timer-button-area {
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .timer-control-btn {
+                width: 180px;
+                height: 48px;
+                font-size: 16px;
+            }
+        }
     </style>
 </head>
 <body>
-
-
-    <div class="container">
-        <header>
+    <div class="view-container">
+        <!-- 主视图 -->
+        <div id="main-view" class="view visible">
+            <div class="container">
+                <header>
             <!-- 左侧：用户头像下拉菜单 -->
             <div class="user-dropdown">
                 <div class="user-avatar-container" id="user-avatar-container" style="display: none;">
@@ -463,8 +740,49 @@
             <h2>活动记录</h2>
             <div id="activity-list" class="activity-list">
                 <div id="no-records" class="no-records">暂无活动记录</div>
+                </div>
+            </section>
             </div>
-        </section>
+        </div>
+        
+        <!-- 计时器详情视图 -->
+        <div id="timer-detail-view" class="view hidden">
+            <!-- 标题栏 -->
+            <div class="timer-header">
+                <div class="timer-activity-title" id="timer-activity-title">
+                    活动名称
+                    <span class="status-indicator" id="timer-status-indicator"></span>
+                </div>
+                <div class="timer-header-controls">
+                    <select class="timer-switch-btn" id="timer-activity-switcher">
+                        <option value="">切换活动</option>
+                    </select>
+                    <button class="timer-back-btn" id="timer-back-btn">返回</button>
+                </div>
+            </div>
+            
+            <!-- 主显示区 -->
+            <div class="timer-main-display">
+                <div class="timer-time-display" id="timer-time-display">00:00:00.00</div>
+                
+                <!-- 按钮区域 -->
+                <div class="timer-button-area" id="timer-button-area">
+                    <!-- 按钮将动态生成 -->
+                </div>
+            </div>
+            
+            <!-- Lap 列表 -->
+            <div class="timer-lap-container">
+                <div class="timer-lap-header">
+                    <span>Lap No.</span>
+                    <span>Split</span>
+                    <span>Total</span>
+                </div>
+                <div id="timer-lap-list">
+                    <!-- Lap 记录将在这里动态添加 -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 支付模态框 -->
@@ -541,11 +859,11 @@
         </div>
     </div>
 
-    <!-- Supabase SDK -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <!-- Supabase SDK（defer） -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
     
-    <!-- Supabase 客户端配置 -->
-    <script src="supabaseClient.js"></script>
+    <!-- Supabase 客户端配置（defer） -->
+    <script src="supabaseClient.js" defer></script>
     
     <!-- 身份验证检查 -->
     <script>
@@ -587,11 +905,11 @@
         });
     </script>
     
-    <script src="export_import.js"></script>
-    <script src="combined.js"></script>
-    <script src="multi-stopwatch-fixed.js"></script>
+    <script src="export_import.js" defer></script>
+    <script src="combined.js" defer></script>
+    <script src="multi-stopwatch-fixed.js" defer></script>
     <!-- 支付功能 -->
-    <script src="payment.js"></script>
+    <script src="payment.js" defer></script>
 
     <!-- PWA Service Worker 注册 -->
     <script>

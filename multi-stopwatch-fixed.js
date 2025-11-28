@@ -3,7 +3,7 @@ class MultiStopwatchManager {
     constructor() {
         // --- Debug instrumentation ---
         this.__debug = {
-            enabled: true,
+            enabled: false,
             tag: 'JITTER',
             updateMainPageUICount: 0,
             lastUpdateMainPageUITs: 0,
@@ -22,12 +22,380 @@ class MultiStopwatchManager {
         this.timers = new Map(); // 存储所有活动的计时器
         this.updateIntervals = new Map(); // 存储更新间隔ID
         this.supabase = null; // Supabase 客户端
+        
+        // 视图管理
+        this.currentView = 'main';
+        this.currentTimerActivity = null;
+        this.timerDetailUpdateInterval = null;
         this.initSupabase();
-        this.loadData().then(() => {
-            this.initMainPageUI();
-        });
+        // 快速首屏：先本地加载并渲染，再后台合并云端
+        this.loadLocalDataOnly();
+        this.initMainPageUI();
+        Promise.resolve().then(() => this.loadCloudDataInBackground());
     }
 
+    // ========== 视图管理函数 ==========
+    
+    // 显示主视图
+    showMainView() {
+        console.log('🏠 切换到主视图');
+        
+        const mainView = document.getElementById('main-view');
+        const timerDetailView = document.getElementById('timer-detail-view');
+        
+        if (mainView && timerDetailView) {
+            mainView.classList.remove('hidden');
+            mainView.classList.add('visible');
+            timerDetailView.classList.remove('visible');
+            timerDetailView.classList.add('hidden');
+            
+            this.currentView = 'main';
+            
+            // 清理计时器详情视图的更新间隔
+            if (this.timerDetailUpdateInterval) {
+                clearInterval(this.timerDetailUpdateInterval);
+                this.timerDetailUpdateInterval = null;
+            }
+            
+            // 刷新主视图显示
+            this.updateMainPageUI();
+            this.startRealTimeUpdate();
+        }
+    }
+    
+    // 显示计时器详情视图
+    showTimerDetailView(activityName) {
+        console.log(`🕰️ 切换到计时器详情视图: "${activityName}"`);
+        
+        const mainView = document.getElementById('main-view');
+        const timerDetailView = document.getElementById('timer-detail-view');
+        
+        if (mainView && timerDetailView) {
+            mainView.classList.remove('visible');
+            mainView.classList.add('hidden');
+            timerDetailView.classList.remove('hidden');
+            timerDetailView.classList.add('visible');
+            
+            this.currentView = 'timer-detail';
+            this.currentTimerActivity = activityName;
+            
+            // 初始化计时器详情视图
+            this.initTimerDetailView(activityName);
+        }
+    }
+    
+    // 初始化计时器详情视图
+    initTimerDetailView(activityName) {
+        const timer = this.getTimer(activityName);
+        
+        // 更新标题
+        const titleElement = document.getElementById('timer-activity-title');
+        if (titleElement) {
+            titleElement.innerHTML = `${activityName}<span class="status-indicator" id="timer-status-indicator"></span>`;
+        }
+        
+        // 初始化按钮事件
+        this.initTimerDetailButtons();
+        
+        // 初始化返回按钮
+        const backBtn = document.getElementById('timer-back-btn');
+        if (backBtn) {
+            backBtn.onclick = () => {
+                this.showMainView();
+            };
+        }
+        
+        // 初始化活动切换器
+        this.updateTimerActivitySwitcher();
+        
+        // 初始更新显示
+        this.updateTimerDetailView();
+        
+        // 启动实时更新
+        this.startTimerDetailUpdate();
+    }
+    
+    // 初始化计时器详情按钮事件（使用事件委托，只绑定一次）
+    initTimerDetailButtons() {
+        const buttonArea = document.getElementById('timer-button-area');
+        if (!buttonArea) return;
+        
+        // 移除旧的事件监听器（如果有）
+        if (this._detailButtonHandler) {
+            buttonArea.removeEventListener('click', this._detailButtonHandler);
+        }
+        
+        // 使用事件委托，只绑定一次
+        this._detailButtonHandler = (e) => {
+            const button = e.target.closest('.timer-control-btn');
+            if (!button) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const action = button.dataset.action;
+            if (!action) return;
+            
+            console.log(`👆 详情页按钮点击: ${action}`);
+            this.handleTimerDetailButtonAction(action);
+        };
+        
+        buttonArea.addEventListener('click', this._detailButtonHandler);
+        console.log('✅ 详情页按钮事件已绑定（事件委托）');
+        
+        // 初始生成按钮HTML
+        this.updateTimerDetailButtons();
+    }
+    
+    // 更新计时器详情视图
+    updateTimerDetailView() {
+        if (this.currentView !== 'timer-detail' || !this.currentTimerActivity) {
+            return;
+        }
+        
+        const timer = this.getTimer(this.currentTimerActivity);
+        if (!timer) return;
+        
+        // 更新时间显示
+        const timeDisplay = document.getElementById('timer-time-display');
+        if (timeDisplay) {
+            const currentTime = this.getCurrentTime(this.currentTimerActivity);
+            timeDisplay.textContent = this.formatTime(currentTime);
+        }
+        
+        // 更新状态指示器
+        const statusIndicator = document.getElementById('timer-status-indicator');
+        if (statusIndicator) {
+            statusIndicator.className = 'status-indicator';
+            if (timer.isRunning) {
+                statusIndicator.classList.add('status-running');
+            } else if (timer.elapsedTime > 0) {
+                statusIndicator.classList.add('status-paused');
+            } else {
+                statusIndicator.classList.add('status-stopped');
+            }
+        }
+        
+        // 不在这里更新按钮！避免重复绑定事件
+        // this.updateTimerDetailButtons(); // 已删除
+        
+        // 更新Lap列表
+        this.updateTimerDetailLaps();
+    }
+    
+    // 更新计时器详情按钮HTML（不绑定事件）
+    updateTimerDetailButtons() {
+        if (this.currentView !== 'timer-detail' || !this.currentTimerActivity) {
+            return;
+        }
+        
+        const timer = this.getTimer(this.currentTimerActivity);
+        const buttonArea = document.getElementById('timer-button-area');
+        if (!timer || !buttonArea) return;
+        
+        // 生成按钮HTML，使用主页相同的timer-btn类
+        let buttonsHTML = '';
+        if (timer.isRunning) {
+            buttonsHTML = `
+                <button class="timer-control-btn secondary" data-action="stop">暂停</button>
+                <button class="timer-control-btn primary" data-action="lap">分段</button>
+                <button class="timer-control-btn primary" data-action="complete">完成</button>
+            `;
+        } else if (timer.elapsedTime > 0) {
+            buttonsHTML = `
+                <button class="timer-control-btn primary" data-action="start">继续</button>
+                <button class="timer-control-btn primary" data-action="complete">完成</button>
+                <button class="timer-control-btn secondary" data-action="reset">重置</button>
+                <button class="timer-control-btn danger" data-action="delete">删除</button>
+            `;
+        } else {
+            buttonsHTML = `
+                <button class="timer-control-btn primary" data-action="start">开始</button>
+                <button class="timer-control-btn danger" data-action="delete">删除</button>
+            `;
+        }
+        
+        // 只更新HTML，不绑定事件（事件已在initTimerDetailButtons中用事件委托绑定）
+        buttonArea.innerHTML = buttonsHTML;
+    }
+    
+    // 处理计时器详情按钮操作
+    handleTimerDetailButtonAction(action) {
+        if (!this.currentTimerActivity) return;
+        
+        console.log(`🔘 计时器详情视图按钮操作: ${action} - ${this.currentTimerActivity}`);
+        
+        switch (action) {
+            case 'start':
+                this.start(this.currentTimerActivity);
+                this.showNotification(`\"${this.currentTimerActivity}\" 已开始计时`);
+                this.updateTimerDetailButtons(); // 更新按钮HTML
+                break;
+                
+            case 'stop':
+                this.stop(this.currentTimerActivity);
+                this.showNotification(`\"${this.currentTimerActivity}\" 已暂停`);
+                this.updateTimerDetailButtons(); // 更新按钮HTML
+                break;
+                
+            case 'lap':
+                this.addLap(this.currentTimerActivity);
+                const timer = this.getTimer(this.currentTimerActivity);
+                this.showNotification(`已添加第 ${timer.laps.length} 个分段`);
+                // Lap不需要更新按钮
+                break;
+                
+            case 'complete':
+                // 直接完成，无需确认对话框，但显示绿色通知
+                this.completeActivityAndReset(this.currentTimerActivity);
+                this.showNotification(`\"${this.currentTimerActivity}\" 活动已完成并保存`, 'success');
+                // 完成后返回主视图
+                this.showMainView();
+                break;
+                
+            case 'reset':
+                if (confirm(`确定要重置\"${this.currentTimerActivity}\"的计时器吗？这将清除当前计时数据。`)) {
+                    this.reset(this.currentTimerActivity);
+                    this.updateTimerDetailButtons(); // 更新按钮HTML
+                }
+                break;
+                
+            case 'delete':
+                if (confirm(`确定要删除\"${this.currentTimerActivity}\"计时器吗？删除后将无法恢复。`)) {
+                    this.delete(this.currentTimerActivity);
+                    this.showNotification(`\"${this.currentTimerActivity}\" 计时器已删除`);
+                    // 删除后返回主视图
+                    this.showMainView();
+                }
+                break;
+        }
+    }
+    
+    // 更新计时器详情Lap列表
+    updateTimerDetailLaps() {
+        if (this.currentView !== 'timer-detail' || !this.currentTimerActivity) {
+            return;
+        }
+        
+        const timer = this.getTimer(this.currentTimerActivity);
+        const lapList = document.getElementById('timer-lap-list');
+        if (!timer || !lapList) return;
+        
+        lapList.innerHTML = '';
+        
+        // 倒序显示Lap（最新的在前面）
+        if (timer.laps && timer.laps.length > 0) {
+            timer.laps.slice().reverse().forEach(lap => {
+                const lapItem = document.createElement('div');
+                lapItem.className = 'timer-lap-item';
+                lapItem.innerHTML = `
+                    <span class="timer-lap-number">Lap ${lap.number}</span>
+                    <span class="lap-split">${this.formatTime(lap.split)}</span>
+                    <span class="lap-total">${this.formatTime(lap.total)}</span>
+                `;
+                lapList.appendChild(lapItem);
+            });
+        }
+    }
+    
+    // 更新计旲器详情活动切换器
+    updateTimerActivitySwitcher() {
+        const switcher = document.getElementById('timer-activity-switcher');
+        if (!switcher || this.currentView !== 'timer-detail') return;
+        
+        const activities = this.getAllActivities();
+        switcher.innerHTML = '<option value="">切换活动</option>';
+        
+        activities.forEach(activity => {
+            if (activity !== this.currentTimerActivity) {
+                const option = document.createElement('option');
+                option.value = activity;
+                option.textContent = activity;
+                switcher.appendChild(option);
+            }
+        });
+        
+        // 绑定切换事件
+        switcher.onchange = (e) => {
+            if (e.target.value) {
+                this.showTimerDetailView(e.target.value);
+            }
+        };
+    }
+    
+    // 启动计时器详情视图实时更新
+    startTimerDetailUpdate() {
+        // 清理旧的间隔
+        if (this.timerDetailUpdateInterval) {
+            clearInterval(this.timerDetailUpdateInterval);
+        }
+        
+        // 启动新的更新间隔
+        this.timerDetailUpdateInterval = setInterval(() => {
+            if (this.currentView === 'timer-detail' && this.currentTimerActivity) {
+                this.updateTimerDetailView();
+            } else {
+                // 如果不在详情视图，清理间隔
+                clearInterval(this.timerDetailUpdateInterval);
+                this.timerDetailUpdateInterval = null;
+            }
+        }, 100); // 每100ms更新一次
+    }
+    
+    // 显示通知（只显示页面内绿色通知，不显示系统弹窗）
+    showNotification(message, type = 'success') {
+        // 1. 控制台日志
+        console.log(`🔔 ${message}`);
+        
+        // 2. 页面内通知（右上角浮动通知）
+        this.showInPageNotification(message, type);
+    }
+    
+    // 页面内通知显示
+    showInPageNotification(message, type = 'success') {
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.className = `in-page-notification ${type}`;
+        notification.textContent = message;
+        
+        // 样式
+        Object.assign(notification.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: type === 'success' ? '#4CAF50' : '#f44336',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            zIndex: '10000',
+            transform: 'translateX(100%)',
+            transition: 'transform 0.3s ease',
+            maxWidth: '300px',
+            wordWrap: 'break-word'
+        });
+        
+        // 添加到页面
+        document.body.appendChild(notification);
+        
+        // 显示动画
+        setTimeout(() => {
+            notification.style.transform = 'translateX(0)';
+        }, 50);
+        
+        // 3秒后隐藏
+        setTimeout(() => {
+            notification.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+    
     // 初始化 Supabase 客户端
     initSupabase() {
         console.log('🚀 MultiStopwatchManager: 开始初始化 Supabase...');
@@ -46,20 +414,44 @@ class MultiStopwatchManager {
             console.error('❌ MultiStopwatchManager: Supabase 初始化失败:', error);
         }
     }
+    
+    // 标准化活动名称（大小写不敏感）
+    normalizeActivityName(name) {
+        return name.trim().toLowerCase();
+    }
+    
+    // 查找存在的活动名称（返回原始大小写格式）
+    findExistingActivityName(inputName) {
+        const normalizedInput = this.normalizeActivityName(inputName);
+        for (const [existingName] of this.timers) {
+            if (this.normalizeActivityName(existingName) === normalizedInput) {
+                return existingName;
+            }
+        }
+        return null;
+    }
 
-    // 创建或获取活动计时器
+    // 创建或获取活动计时器（支持大小写不敏感）
     getTimer(activityName) {
-        if (!this.timers.has(activityName)) {
-            this.timers.set(activityName, {
-                name: activityName,
+        // 查找是否已存在相同的活动（大小写不敏感）
+        const existingName = this.findExistingActivityName(activityName);
+        const finalName = existingName || activityName;
+        
+        if (!this.timers.has(finalName)) {
+            this.timers.set(finalName, {
+                name: finalName,
                 startTime: null,
                 elapsedTime: 0,
                 isRunning: false,
                 laps: [],
                 created: Date.now()
             });
+            console.log(`✨ 创建新活动: "${finalName}"`);
+        } else if (existingName && existingName !== activityName) {
+            console.log(`🔄 使用已存在活动: "${activityName}" -> "${existingName}"`);
         }
-        return this.timers.get(activityName);
+        
+        return this.timers.get(finalName);
     }
 
     // 开始计时
@@ -311,16 +703,17 @@ class MultiStopwatchManager {
                 const activityName = activityNameInput.value.trim();
                 
                 if (!activityName) {
-                    alert('请输入活动名称');
+                    this.showNotification('请输入活动名称', 'error');
                     return;
                 }
 
-                // 创建计时器并跳转到计时页面
-                this.getTimer(activityName);
+                // 创建计时器并切换到详情视图
+                const timer = this.getTimer(activityName);
+                const finalActivityName = timer.name; // 使用标准化后的名称
                 this.saveData();
                 
-                // 跳转到计时页面
-                window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
+                // 切换到计时器详情视图
+                this.showTimerDetailView(finalActivityName);
             });
             
             // 添加Enter键快捷启动
@@ -336,16 +729,17 @@ class MultiStopwatchManager {
                     const activityName = activityNameInput.value.trim();
                     
                     if (!activityName) {
-                        alert('请输入活动名称');
+                        this.showNotification('请输入活动名称', 'error');
                         return;
                     }
 
-                    // 创建计时器并跳转到计时页面
-                    this.getTimer(activityName);
+                    // 创建计时器并切换到详情视图
+                    const timer = this.getTimer(activityName);
+                    const finalActivityName = timer.name; // 使用标准化后的名称
                     this.saveData();
                     
-                    // 跳转到计时页面
-                    window.location.href = `stopwatch.html?activity=${encodeURIComponent(activityName)}`;
+                    // 切换到计时器详情视图
+                    this.showTimerDetailView(finalActivityName);
                 }
             });
             
@@ -362,11 +756,18 @@ class MultiStopwatchManager {
         // 隐藏旧的当前活动区域
         this.hideOldCurrentActivity();
 
-        // 添加页面焦点监听，确保页面间状态同步
-        window.addEventListener('focus', () => {
-            console.log('🎯 页面重新获得焦点，刷新状态...');
-            this.loadData();
-            this.updateMainPageUI();
+        // 监听 localStorage 变化，确保跨窗口同步
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'multiStopwatchData') {
+                console.log('🔄 检测到数据变化，同步状态...');
+                this.loadData().then(() => {
+                    if (this.currentView === 'main') {
+                        this.updateMainPageUI();
+                    } else if (this.currentView === 'timer-detail') {
+                        this.updateTimerDetailView();
+                    }
+                });
+            }
         });
 
         this.updateMainPageUI();
@@ -484,18 +885,12 @@ class MultiStopwatchManager {
             }
         });
 
-        // 清空现有内容（除了no-timers元素）
-        Array.from(timersContainer.children).forEach(child => {
-            if (child.id !== 'no-timers') {
-                child.remove();
+        // 移除已不存在的活动卡片
+        Array.from(timersContainer.querySelectorAll('.timer-card')).forEach(card => {
+            const name = card.dataset.activity;
+            if (!activitySet.has(name)) {
+                card.remove();
             }
-        });
-
-        // 为每个活动创建计时器卡片
-        activities.forEach(activityName => {
-            const timer = this.getTimer(activityName);
-            const timerCard = this.createTimerCard(timer);
-            timersContainer.appendChild(timerCard);
         });
 
         // 启动实时更新
@@ -526,14 +921,14 @@ class MultiStopwatchManager {
             </div>
         `;
 
-        // 添加点击事件 - 点击卡片进入计时页面
+        // 添加点击事件 - 点击卡片进入计时器详情视图
         card.addEventListener('click', (e) => {
             // 如果点击的是按钮，不触发卡片点击事件
             if (e.target.classList.contains('timer-btn')) {
                 return;
             }
             
-            window.location.href = `stopwatch.html?activity=${encodeURIComponent(timer.name)}`;
+            this.showTimerDetailView(timer.name);
         });
 
         // 添加按钮事件监听器
@@ -587,7 +982,7 @@ class MultiStopwatchManager {
     }
 
     // 处理按钮操作
-    handleButtonAction(action, timer) {
+    async handleButtonAction(action, timer) {
         console.log(`🔘 主界面按钮操作: ${action} - ${timer.name}`);
         this.__d('handleButtonAction()', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: timer.isRunning, elapsed: timer.elapsedTime });
         // 在按钮操作期间短暂开启护栏，防止DOM重绘引发的误点击
@@ -618,16 +1013,24 @@ class MultiStopwatchManager {
                 break;
                 
             case 'complete':
-                if (confirm(`确定要完成"${timer.name}"活动吗？这将保存活动记录并重置计时器。`)) {
-                    this.completeActivityAndReset(timer.name);
-                    this.showNotification(`"${timer.name}" 活动已完成并保存`);
+                // 直接完成：先反馈，再等待完整保存与重置
+                this.showNotification(`"${timer.name}" 活动已完成并保存`, 'success');
+                await this.completeActivityAndReset(timer.name);
+                // 完成后立即刷新UI并解禁按钮
+                this.startRealTimeUpdate();
+                this.updateMainPageUI();
+                if (card) {
+                    const buttons = card.querySelectorAll('.timer-btn');
+                    buttons.forEach(btn => btn.disabled = false);
                 }
-                break;
+                console.log(`✅ 主界面操作"${action}"完成，UI已更新`);
+                this.__d('handleButtonAction() done', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: this.getTimer(timer.name)?.isRunning });
+                return; // 已完成处理，避免进入通用延迟逻辑
                 
             case 'reset':
-                if (confirm(`确定要重置"${timer.name}"的计时器吗？这将清除当前计时数据。`)) {
+                if (confirm(`确定要重置\"${timer.name}\"的计时器吗？这将清除当前计时数据。`)) {
                     this.reset(timer.name);
-                    this.showNotification(`"${timer.name}" 计时器已重置`);
+                    // 不显示通知，已经有confirm对话框
                 }
                 break;
                 
@@ -653,7 +1056,7 @@ class MultiStopwatchManager {
             
             console.log(`✅ 主界面操作"${action}"完成，UI已更新`);
             this.__d('handleButtonAction() done', { action, activityName: timer.name, intervals: this.updateIntervals.size, running: this.getTimer(timer.name)?.isRunning });
-        }, 300); // 增加延迟时间，确保状态稳定
+        }, 300); // 增加延迟时间，确保状态稳定（complete 分支已提前 return）
     }
 
     // 显示通知
@@ -839,14 +1242,23 @@ class MultiStopwatchManager {
 
     // 保存数据到本地存储和 Supabase
     async saveData() {
+        console.log('\n💾 ========== 开始保存数据 ==========');
+        console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+        console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
+        
         const data = {};
         const now = Date.now();
         this.timers.forEach((timer, name) => {
             // 标记本地最新更新时间，避免被较旧的云端状态覆盖
             timer.lastUpdate = now;
             data[name] = { ...timer };
+            console.log(`📋 准备保存计时器: ${name}`, {
+                运行中: timer.isRunning,
+                已用时: Math.floor((timer.elapsedTime || 0) / 1000) + '秒'
+            });
         });
         localStorage.setItem('multiStopwatchData', JSON.stringify(data));
+        console.log(`✅ 已保存到本地存储 (${this.timers.size} 个计时器)`);
         
         // 同时保存兼容旧统计系统的数据格式
         this.saveCompatibleData();
@@ -854,19 +1266,19 @@ class MultiStopwatchManager {
         // 如果 Supabase 连接成功，也保存到云端
         if (this.supabase) {
             try {
-                console.log('🔄 MultiStopwatchManager: 正在同步数据到 Supabase...');
+                console.log('\n☁️ 开始同步到云端...');
                 
                 // 获取当前用户
                 const { data: { user } } = await this.supabase.auth.getUser();
                 if (!user) {
-                    console.warn('MultiStopwatchManager: 用户未登录，跳过云端同步');
+                    console.warn('⚠️ 用户未登录，跳过云端同步');
                     return;
                 }
                 
-                // 保存多计时器数据
-                const { data: supabaseData, error } = await this.supabase
-                    .from('multi_timers')
-                    .upsert(Array.from(this.timers.entries()).map(([name, timer]) => ({
+                console.log(`👤 当前用户: ${user.email}`);
+                
+                const timersToSync = Array.from(this.timers.entries()).map(([name, timer]) => {
+                    const record = {
                         id: timer.id || crypto.randomUUID(), // 使用真正的 UUID
                         user_id: user.id, // 关联用户ID
                         timer_name: name,
@@ -876,20 +1288,38 @@ class MultiStopwatchManager {
                         laps: timer.laps || [],
                         created_at: new Date(timer.created).toISOString(),
                         updated_at: new Date().toISOString()
-                    })), {
+                    };
+                    
+                    console.log(`☁️ 将同步到云端: ${name}`, {
+                        运行中: record.is_running,
+                        已用时: Math.floor(record.elapsed_time_ms / 1000) + '秒'
+                    });
+                    
+                    return record;
+                });
+                
+                // 保存多计时器数据
+                const { data: supabaseData, error } = await this.supabase
+                    .from('multi_timers')
+                    .upsert(timersToSync, {
                         onConflict: 'user_id,timer_name' // 使用 user_id 和 timer_name 作为冲突检测字段
                     });
                 
                 if (error) {
-                    console.error('❌ MultiStopwatchManager: 保存到 Supabase 失败:', error);
+                    console.error('❌ 保存到 Supabase 失败:', error);
                 } else {
-                    console.log('✅ MultiStopwatchManager: 数据已同步到 Supabase');
+                    console.log(`✅ 数据已同步到 Supabase (${timersToSync.length} 个计时器)`);
+                    console.log(`📢 其他设备刷新后将看到这些变化`);
                 }
                 
             } catch (error) {
-                console.error('❌ MultiStopwatchManager: Supabase 同步失败:', error);
+                console.error('❌ Supabase 同步异常:', error);
             }
+        } else {
+            console.log('⚠️ Supabase 未初始化，跳过云端同步');
         }
+        
+        console.log(`========== 保存数据结束 ==========\n`);
     }
 
     // *** 关键修复：清除当前活动记录 ***
@@ -944,7 +1374,10 @@ class MultiStopwatchManager {
     }
 
     // 完成活动时添加到统计记录
-    completeActivity(activityName, startTime, endTime) {
+    async completeActivity(activityName, startTime, endTime) {
+        console.log(`\n💾 ========== 保存活动记录 ==========`);
+        console.log(`📌 活动: "${activityName}"`);
+        
         let completedActivities = [];
         
         // 获取现有记录
@@ -978,21 +1411,202 @@ class MultiStopwatchManager {
 
         completedActivities.unshift(activityRecord);
         
-        // 保存更新后的记录
+        // 保存更新后的记录到本地
         localStorage.setItem('timeTrackerActivities', JSON.stringify(completedActivities));
+        console.log(`✅ 已保存到本地存储 (持续 ${activityRecord.duration} 分钟)`);
         
         // 更新兼容数据
         this.saveCompatibleData();
 
-        console.log(`MultiStopwatchManager: 活动记录已保存 - ${activityName}, 实际持续 ${activityRecord.duration} 分钟 (修复了暂停时间计算bug)`);
+        // *** 核心修复：同步活动记录到 Supabase ***
+        if (this.supabase) {
+            try {
+                console.log(`☁️ 开始同步活动记录到云端...`);
+                
+                // 获取当前用户
+                const { data: { user } } = await this.supabase.auth.getUser();
+                if (!user) {
+                    console.warn('⚠️ 用户未登录，活动记录不会同步到云端');
+                    console.log(`========== 活动记录保存结束 (仅本地) ==========\n`);
+                    return;
+                }
+                
+                console.log(`👤 当前用户: ${user.email}`);
+                
+                // 保存到 activities 表（使用 insert 而不是 upsert，因为每次都是新记录）
+                const { error } = await this.supabase
+                    .from('activities')
+                    .insert({
+                        id: activityRecord.id,
+                        user_id: user.id,
+                        activity_name: activityRecord.activityName,
+                        start_time: actualStartTime.toISOString(),
+                        end_time: actualEndTime.toISOString(),
+                        duration_minutes: activityRecord.duration,
+                        note: '',
+                        color: this.getColorForActivity(activityRecord.activityName),
+                        created_at: actualStartTime.toISOString(),
+                        updated_at: new Date().toISOString()
+                    });
+                
+                if (error) {
+                    console.error('❌ 保存活动记录到云端失败:', error);
+                } else {
+                    console.log(`✅ 活动记录已同步到云端！`);
+                    console.log(`📢 其他设备刷新后将看到这条记录`);
+                }
+                
+            } catch (error) {
+                console.error('❌ 云端同步异常:', error);
+            }
+        } else {
+            console.warn('⚠️ Supabase 未初始化，活动记录不会同步到云端');
+        }
+        
+        console.log(`========== 活动记录保存结束 ==========\n`);
+    }
+    
+    // 根据活动名称生成颜色（优化版，确保每个活动都有独特颜色）
+    getColorForActivity(activityName) {
+        // 使用更多易区分的颜色，增加颜色池
+        const colors = [
+            // 红色系 - 热情与能量
+            '#FF0000', // 纯红
+            '#DC143C', // 深红
+            '#FF1493', // 深粉红
+            '#FF69B4', // 热粉红
+            
+            // 橙色系 - 温暖与活力
+            '#FF4500', // 橙红色
+            '#FF6347', // 番茄色
+            '#FF7F50', // 珊瑚色
+            '#FFA500', // 橙色
+            
+            // 黄色系 - 明亮与希望
+            '#FFD700', // 金色
+            '#FFFF00', // 黄色
+            '#FFEB3B', // 明黄
+            '#FFC107', // 琥珀色
+            
+            // 绿色系 - 生机与成长
+            '#00FF00', // 鲜绿
+            '#32CD32', // 酸橙绿
+            '#00FA9A', // 中春绿
+            '#00CED1', // 深绿松色
+            
+            // 青色系 - 清新与冷静
+            '#00FFFF', // 青色
+            '#00BFFF', // 深天蓝
+            '#1E90FF', // 闪电蓝
+            '#4169E1', // 皇家蓝
+            
+            // 蓝色系 - 稳重与信任
+            '#0000FF', // 纯蓝
+            '#0000CD', // 中蓝
+            '#191970', // 午夜蓝
+            '#4682B4', // 钢蓝
+            
+            // 紫色系 - 神秘与优雅
+            '#9370DB', // 中紫色
+            '#8B00FF', // 紫罗兰色
+            '#9932CC', // 暗兰色
+            '#BA55D3', // 中兰花紫
+            
+            // 特殊色 - 丰富视觉
+            '#FF00FF', // 品红
+            '#00FF7F', // 春绿
+            '#FFB6C1', // 浅粉红
+            '#20B2AA', // 浅海洋绿
+            
+            // 白色系 - 纯洁与简洁
+            '#FFFFFF', // 纯白
+            '#F5F5F5', // 烟白
+            '#E0E0E0', // 浅灰
+            '#C0C0C0'  // 银色
+        ];
+        
+        // 使用更好的哈希算法，减少冲突
+        let hash = 0;
+        for (let i = 0; i < activityName.length; i++) {
+            const char = activityName.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        
+        // 使用绝对值并确保正数
+        const index = Math.abs(hash) % colors.length;
+        return colors[index];
     }
 
-    // 完成活动并重置计时器
-    completeActivityAndReset(activityName) {
-        console.log(`🏁 开始完成活动: "${activityName}"`);
+    // 本地快速保存活动记录（不阻塞UI）
+    completeActivityLocal(activityName, actualStartTime, actualEndTime, actualDurationMs) {
+        let completedActivities = [];
+        const existingData = localStorage.getItem('timeTrackerActivities');
+        if (existingData) {
+            try { completedActivities = JSON.parse(existingData); } catch (_) { completedActivities = []; }
+        }
+
+        const activityRecord = {
+            id: `stopwatch_${activityName}_${Date.now()}`,
+            activityName,
+            startTime: new Date(actualStartTime),
+            endTime: new Date(actualEndTime),
+            duration: Math.floor((actualDurationMs || 0) / (1000 * 60))
+        };
+
+        completedActivities.unshift(activityRecord);
+        localStorage.setItem('timeTrackerActivities', JSON.stringify(completedActivities));
+        this.saveCompatibleData();
+        console.log('✅ [本地] 活动记录已保存（不阻塞UI）');
+        return activityRecord;
+    }
+
+    // 后台同步活动记录到云端（可失败重试）
+    async syncActivityRecordToCloud(activityRecord) {
+        if (!this.supabase) { console.warn('⚠️ Supabase 未初始化，跳过活动同步'); return; }
+        try {
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) { console.warn('⚠️ 用户未登录，跳过活动同步'); return; }
+            const { error } = await this.supabase
+                .from('activities')
+                .insert({
+                    id: activityRecord.id,
+                    user_id: user.id,
+                    activity_name: activityRecord.activityName,
+                    start_time: new Date(activityRecord.startTime).toISOString(),
+                    end_time: new Date(activityRecord.endTime).toISOString(),
+                    duration_minutes: activityRecord.duration,
+                    note: '',
+                    color: this.getColorForActivity(activityRecord.activityName),
+                    created_at: new Date(activityRecord.startTime).toISOString(),
+                    updated_at: new Date().toISOString()
+                });
+            if (error) {
+                console.error('❌ [云端] 活动记录同步失败:', error);
+            } else {
+                console.log('✅ [云端] 活动记录已同步');
+            }
+        } catch (e) {
+            console.error('❌ [云端] 活动记录同步异常:', e);
+        }
+    }
+
+    // 完成活动并重置计时器（快速返回，云端异步）
+    async completeActivityAndReset(activityName) {
+        console.log(`\n🏁 ========== 开始完成活动 ==========`);
+        console.log(`📌 活动名称: "${activityName}"`);
+        console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+        console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
         
         const timer = this.getTimer(activityName);
         const endTime = Date.now();
+        
+        console.log(`📊 当前计时器状态:`, {
+            isRunning: timer.isRunning,
+            elapsedTime: timer.elapsedTime,
+            startTime: timer.startTime,
+            laps: timer.laps?.length || 0
+        });
         
         // 首先停止计时器的实时更新
         if (this.updateIntervals.has(activityName)) {
@@ -1001,69 +1615,162 @@ class MultiStopwatchManager {
             console.log(`⏹️ 已清除"${activityName}"的更新间隔`);
         }
         
-        // 如果计时器正在运行，先停止它
-        if (timer.isRunning) {
-            console.log(`⏸️ 停止正在运行的计时器: "${activityName}"`);
-            timer.elapsedTime = endTime - timer.startTime;
-            timer.isRunning = false;
+        // 快照当前持续时间，避免后续reset影响
+        const snapshotElapsed = timer.isRunning ? (endTime - timer.startTime) : (timer.elapsedTime || 0);
+        const actualStartTime = timer.startTime || (endTime - snapshotElapsed);
+        const actualEndTime = actualStartTime + snapshotElapsed;
+
+        // 本地快速保存（不等待云端）
+        if (snapshotElapsed > 0) {
+            console.log('💾 [本地] 准备快速保存活动记录（不阻塞UI）');
+            const record = this.completeActivityLocal(activityName, actualStartTime, actualEndTime, snapshotElapsed);
+            // 云端后台同步（不阻塞）
+            Promise.resolve().then(() => this.syncActivityRecordToCloud(record));
         }
-        
-        // 只有当计时器有时间记录时才保存
-        if (timer.elapsedTime > 0) {
-            // *** 关键修复：使用计时器的实际开始时间和实际持续时间 ***
-            const actualStartTime = timer.startTime || (endTime - timer.elapsedTime);
-            const actualEndTime = actualStartTime + timer.elapsedTime; // 开始时间 + 实际持续时间
-            
-            console.log(`💾 保存活动记录: "${activityName}", 实际用时: ${Math.floor(timer.elapsedTime / 1000)}秒 (修复了暂停时间计算bug)`);
-            
-            // 保存活动记录
-            this.completeActivity(activityName, actualStartTime, actualEndTime);
-        }
-        
-        // 重置计时器
-        console.log(`🔄 重置计时器: "${activityName}"`);
+
+        // 后台删除云端计时器状态（不阻塞）
+        Promise.resolve().then(() => this.deleteTimerFromCloud(activityName));
+
+        // 立即重置本地计时器并刷新UI（给用户“秒回”的丝滑体验）
+        console.log(`🔄 重置本地计时器: "${activityName}"`);
         this.reset(activityName);
-        
-        // 显示完成提示
-        const minutes = Math.floor((timer.elapsedTime || 0) / (1000 * 60));
-        const seconds = Math.floor(((timer.elapsedTime || 0) % (1000 * 60)) / 1000);
-        
-        let timeMessage = '';
-        if (minutes > 0) {
-            timeMessage = `${minutes} 分钟 ${seconds} 秒`;
-        } else if (seconds > 0) {
-            timeMessage = `${seconds} 秒`;
-        } else {
-            timeMessage = '0 秒';
+        console.log('✅ 已快速重置并返回UI');
+        console.log(`========== 完成活动结束（云端在后台同步） ==========\n`);
+        // 通知已在外层按钮处理处显示
+    }
+
+    // 从云端删除计时器状态
+    async deleteTimerFromCloud(activityName) {
+        if (!this.supabase) {
+            console.warn('⚠️ Supabase 未初始化，无法删除云端计时器');
+            return;
         }
-        
-        console.log(`✅ 活动"${activityName}"已完成，总用时: ${timeMessage}`);
-        
-        if (timer.elapsedTime > 0) {
-            alert(`活动"${activityName}"已完成！\n总用时: ${timeMessage}\n记录已保存到统计中。`);
+
+        try {
+            console.log(`🗑️ 开始从云端删除计时器: "${activityName}"`);
+            
+            // 获取当前用户
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) {
+                console.warn('⚠️ 用户未登录，无法删除云端计时器');
+                return;
+            }
+
+            console.log(`👤 当前用户: ${user.email} (${user.id})`);
+
+            // 从 multi_timers 表中删除
+            const { error } = await this.supabase
+                .from('multi_timers')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('timer_name', activityName);
+
+            if (error) {
+                console.error('❌ 删除云端计时器失败:', error);
+            } else {
+                console.log(`✅ 成功从云端删除计时器: "${activityName}"`);
+                console.log(`📢 其他设备刷新后将不会再看到这个计时器`);
+            }
+        } catch (error) {
+            console.error('❌ 删除云端计时器异常:', error);
+        }
+    }
+
+    // 仅从本地存储加载（首屏快速）
+    loadLocalDataOnly() {
+        console.log('\n🔍 [fast] 从本地存储加载计时器...');
+        const data = localStorage.getItem('multiStopwatchData');
+        if (data) {
+            try {
+                const parsed = JSON.parse(data);
+                Object.entries(parsed).forEach(([name, timer]) => {
+                    this.timers.set(name, { ...timer });
+                    if (timer.isRunning) {
+                        const intervalId = setInterval(() => {
+                            this.updateTimerCard(name);
+                        }, 100);
+                        this.updateIntervals.set(name, intervalId);
+                    }
+                });
+            } catch (error) {
+                console.error('❌ 本地加载失败:', error);
+            }
         } else {
-            alert(`活动"${activityName}"已重置。`);
+            console.log('⚠️ 本地没有计时器数据');
+        }
+        console.log('✅ [fast] 本地计时器加载完成');
+    }
+
+    // 后台从云端加载并合并（不阻塞首屏）
+    async loadCloudDataInBackground() {
+        if (!this.supabase) { console.warn('⚠️(bg) Supabase 未初始化'); return; }
+        try {
+            console.log('\n☁️(bg) 开始从云端加载数据...');
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) { console.warn('⚠️(bg) 用户未登录'); return; }
+            const { data: supabaseData, error } = await this.supabase
+                .from('multi_timers')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('updated_at', { ascending: false });
+            if (error) { console.error('❌(bg) 云端加载失败:', error); return; }
+            if (!supabaseData || supabaseData.length === 0) { console.log('☁️(bg) 云端无计时器'); return; }
+
+            let changed = false;
+            supabaseData.forEach(timerData => {
+                const name = timerData.timer_name;
+                const existingTimer = this.timers.get(name);
+                const cloudUpdatedAt = new Date(timerData.updated_at);
+                const localUpdatedAt = new Date(existingTimer?.lastUpdate || 0);
+                if (!existingTimer || cloudUpdatedAt > localUpdatedAt) {
+                    this.timers.set(name, {
+                        id: timerData.id,
+                        name,
+                        startTime: timerData.start_time ? new Date(timerData.start_time).getTime() : null,
+                        elapsedTime: timerData.elapsed_time_ms || 0,
+                        isRunning: timerData.is_running || false,
+                        laps: timerData.laps || [],
+                        created: timerData.created_at ? new Date(timerData.created_at).getTime() : Date.now(),
+                        lastUpdate: cloudUpdatedAt.getTime()
+                    });
+                    changed = true;
+                }
+            });
+            if (changed) {
+                this.saveData();
+                this.updateMainPageUI();
+                this.startRealTimeUpdate();
+            }
+            console.log('✅(bg) 云端数据加载合并完成');
+        } catch (e) {
+            console.error('❌(bg) 从云端加载异常:', e);
         }
     }
 
     // 从本地存储和 Supabase 加载数据
     async loadData() {
-        console.log('🔍 loadData() 被调用');
+        console.log('\n🔍 ========== 开始加载数据 ==========');
+        console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
+        console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
         
         // 首先从本地存储加载
         const data = localStorage.getItem('multiStopwatchData');
         if (data) {
             try {
                 const parsed = JSON.parse(data);
-                console.log('📦 从本地存储加载的数据:', parsed);
+                console.log(`📦 从本地存储加载了 ${Object.keys(parsed).length} 条计时器`);
                 Object.entries(parsed).forEach(([name, timer]) => {
                     this.timers.set(name, {
                         ...timer
                     });
-                    console.log(`📋 处理计时器: ${name}, 运行状态: ${timer.isRunning}`);
+                    console.log(`📋 本地计时器: ${name}`, {
+                        运行中: timer.isRunning,
+                        已用时: Math.floor((timer.elapsedTime || 0) / 1000) + '秒',
+                        最后更新: timer.lastUpdate ? new Date(timer.lastUpdate).toLocaleString('zh-CN') : '未知'
+                    });
                     // 如果计时器正在运行，重启更新间隔
                     if (timer.isRunning) {
-                        console.log(`🚀 恢复运行状态: ${name}`);
+                        console.log(`🚀 恢复本地运行状态: ${name}`);
                         const intervalId = setInterval(() => {
                             this.updateTimerCard(name);
                         }, 100);
@@ -1073,7 +1780,7 @@ class MultiStopwatchManager {
                 const running = Array.from(this.timers.entries()).filter(([, t]) => t.isRunning).map(([n]) => n);
                 this.__d('loadData() summary', { timers: this.timers.size, running });
             } catch (error) {
-                console.error('加载本地数据失败:', error);
+                console.error('❌ 加载本地数据失败:', error);
             }
         } else {
             console.log('⚠️ 没有找到本地存储的数据');
@@ -1082,14 +1789,16 @@ class MultiStopwatchManager {
         // 如果 Supabase 连接成功，尝试从云端加载最新数据
         if (this.supabase) {
             try {
-                console.log('🔄 MultiStopwatchManager: 正在从 Supabase 加载数据...');
+                console.log('\n☁️ 开始从云端加载数据...');
                 
                 // 获取当前用户
                 const { data: { user } } = await this.supabase.auth.getUser();
                 if (!user) {
-                    console.warn('MultiStopwatchManager: 用户未登录，跳过云端同步');
+                    console.warn('⚠️ 用户未登录，跳过云端同步');
                     return;
                 }
+                
+                console.log(`👤 当前用户: ${user.email}`);
                 
                 const { data: supabaseData, error } = await this.supabase
                     .from('multi_timers')
@@ -1098,17 +1807,40 @@ class MultiStopwatchManager {
                     .order('updated_at', { ascending: false });
                 
                 if (error) {
-                    console.error('❌ MultiStopwatchManager: 从 Supabase 加载失败:', error);
+                    console.error('❌ 从 Supabase 加载失败:', error);
                 } else if (supabaseData && supabaseData.length > 0) {
-                    console.log(`✅ MultiStopwatchManager: 从 Supabase 加载了 ${supabaseData.length} 条计时器记录`);
+                    console.log(`☁️ 从云端加载了 ${supabaseData.length} 条计时器记录`);
                     
                     // 转换数据格式并合并
                     supabaseData.forEach(timerData => {
                         const name = timerData.timer_name;
                         const existingTimer = this.timers.get(name);
                         
+                        const cloudUpdatedAt = new Date(timerData.updated_at);
+                        const localUpdatedAt = existingTimer?.lastUpdate ? new Date(existingTimer.lastUpdate) : new Date(0);
+                        
+                        console.log(`\n🔄 比较计时器: "${name}"`);
+                        console.log(`  ☁️  云端状态:`, {
+                            运行中: timerData.is_running,
+                            已用时: Math.floor((timerData.elapsed_time_ms || 0) / 1000) + '秒',
+                            更新时间: cloudUpdatedAt.toLocaleString('zh-CN')
+                        });
+                        
+                        if (existingTimer) {
+                            console.log(`  💻 本地状态:`, {
+                                运行中: existingTimer.isRunning,
+                                已用时: Math.floor((existingTimer.elapsedTime || 0) / 1000) + '秒',
+                                更新时间: localUpdatedAt.toLocaleString('zh-CN')
+                            });
+                        } else {
+                            console.log(`  💻 本地无此计时器`);
+                        }
+                        
                         // 如果本地没有这个计时器，或者云端数据更新，则使用云端数据
-                        if (!existingTimer || new Date(timerData.updated_at) > new Date(existingTimer.lastUpdate || 0)) {
+                        if (!existingTimer || cloudUpdatedAt > localUpdatedAt) {
+                            const decision = !existingTimer ? '本地无数据' : '云端更新';
+                            console.log(`  ✅ 决定: 使用云端数据 (${decision})`);
+                            
                             const cloudTimer = {
                                 id: timerData.id, // 保存云端 ID
                                 name: name,
@@ -1117,28 +1849,37 @@ class MultiStopwatchManager {
                                 isRunning: timerData.is_running || false,
                                 laps: timerData.laps || [],
                                 created: timerData.created_at ? new Date(timerData.created_at).getTime() : Date.now(),
-                                lastUpdate: new Date(timerData.updated_at).getTime()
+                                lastUpdate: cloudUpdatedAt.getTime()
                             };
                             
                             this.timers.set(name, cloudTimer);
-                            console.log(`☁️ 从云端恢复计时器: ${name}`);
                             
                             // 如果计时器正在运行，重启更新间隔
                             if (cloudTimer.isRunning) {
-                                console.log(`🚀 恢复云端运行状态: ${name}`);
+                                console.log(`  🚀 启动云端计时器: ${name}`);
                                 const intervalId = setInterval(() => {
                                     this.updateTimerCard(name);
                                 }, 100);
                                 this.updateIntervals.set(name, intervalId);
                             }
+                        } else {
+                            console.log(`  ⏭️  决定: 保留本地数据 (本地更新)`);
                         }
                     });
+                    
+                    console.log(`\n✅ 云端数据加载完成`);
+                } else {
+                    console.log('☁️ 云端没有计时器记录');
                 }
                 
             } catch (error) {
-                console.error('❌ MultiStopwatchManager: 从 Supabase 加载数据失败:', error);
+                console.error('❌ 从 Supabase 加载数据失败:', error);
             }
+        } else {
+            console.log('⚠️ Supabase 未初始化，跳过云端加载');
         }
+        
+        console.log(`========== 数据加载结束 ==========\n`);
     }
 
     // 清理资源
@@ -1174,29 +1915,30 @@ window.addEventListener('beforeunload', () => {
     if (typeof window !== 'undefined') {
         window.addEventListener('focus', () => {
             if (window.multiStopwatchManager) {
-                window.multiStopwatchManager.loadData().then(() => {
-                    window.multiStopwatchManager.updateMainPageUI();
-                    window.multiStopwatchManager.startRealTimeUpdate();
-                    console.log('🔄 页面focus，已强制同步状态');
+                window.multiStopwatchManager.loadCloudDataInBackground().then(() => {
+                    console.log('🔄 页面focus，已后台同步状态');
                 });
             }
         });
         window.addEventListener('storage', (e) => {
             if (e.key === 'multiStopwatchData' && window.multiStopwatchManager) {
-                window.multiStopwatchManager.loadData().then(() => {
-                    window.multiStopwatchManager.updateMainPageUI();
-                    window.multiStopwatchManager.startRealTimeUpdate();
-                    console.log('🔄 storage事件，已强制同步状态');
-                });
+                window.multiStopwatchManager.loadLocalDataOnly();
+                window.multiStopwatchManager.updateMainPageUI();
+                window.multiStopwatchManager.startRealTimeUpdate();
+                console.log('🔄 storage事件，已本地快速同步');
             }
         });
-        // 页面初次加载也同步一次
+        // 页面初次加载也同步一次（防止重复执行，做幂等保护）
         window.addEventListener('DOMContentLoaded', () => {
+            if (window.__mst_initial_sync_done) return;
+            window.__mst_initial_sync_done = true;
             if (window.multiStopwatchManager) {
-                window.multiStopwatchManager.loadData().then(() => {
-                    window.multiStopwatchManager.updateMainPageUI();
-                    window.multiStopwatchManager.startRealTimeUpdate();
-                    console.log('🔄 DOMContentLoaded，已强制同步状态');
+                // 初次加载：本地优先 + 云端后台
+                window.multiStopwatchManager.loadLocalDataOnly();
+                window.multiStopwatchManager.updateMainPageUI();
+                window.multiStopwatchManager.startRealTimeUpdate();
+                window.multiStopwatchManager.loadCloudDataInBackground().then(() => {
+                    console.log('🔄 DOMContentLoaded，云端后台同步完成');
                 });
             }
         });
