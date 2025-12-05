@@ -897,6 +897,44 @@ class MultiStopwatchManager {
         this.startRealTimeUpdate();
     }
 
+    // 通知主页面强制刷新活动记录（与 combined.js 对接）
+    triggerCombinedReload(reason = 'mst') {
+        if (typeof window === 'undefined') return;
+        const reload = typeof window.forceActivityReload === 'function'
+            ? window.forceActivityReload
+            : (typeof window.refreshActivitiesFromLocal === 'function' ? window.refreshActivitiesFromLocal : null);
+        if (!reload) {
+            this.__d('forceActivityReload unavailable', { reason });
+            return;
+        }
+        try {
+            reload(reason);
+        } catch (error) {
+            console.error('❌ 调用 forceActivityReload 失败:', error);
+        }
+    }
+
+    // 完成后分时段&短轮询刷新，确保新记录落地后 UI 能看到
+    schedulePostCompleteRefreshes(activityName) {
+        const fire = (tag) => {
+            this.__d('post-complete refresh', { tag, activityName });
+            this.triggerCombinedReload(tag);
+        };
+        fire('complete:immediate');
+        [100, 300, 800].forEach(delay => {
+            setTimeout(() => fire(`complete:+${delay}ms`), delay);
+        });
+        let polls = 0;
+        const maxPolls = 5;
+        const poll = () => {
+            if (polls >= maxPolls) return;
+            polls += 1;
+            fire(`complete:poll-${polls}`);
+            setTimeout(poll, 500);
+        };
+        setTimeout(poll, 500);
+    }
+
     // 创建计时器卡片
     createTimerCard(timer) {
         const card = document.createElement('div');
@@ -1019,6 +1057,7 @@ class MultiStopwatchManager {
                 // 完成后立即刷新UI并解禁按钮
                 this.startRealTimeUpdate();
                 this.updateMainPageUI();
+                this.schedulePostCompleteRefreshes(timer.name);
                 if (card) {
                     const buttons = card.querySelectorAll('.timer-btn');
                     buttons.forEach(btn => btn.disabled = false);

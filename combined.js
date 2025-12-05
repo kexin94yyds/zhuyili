@@ -568,12 +568,25 @@ function endActivity() {
 
 // 更新当前活动UI
 function updateCurrentActivityUI() {
+    // 确保 DOM 元素已初始化
+    if (!noActivityElement) noActivityElement = document.getElementById('no-activity');
+    if (!activityDetailsElement) activityDetailsElement = document.getElementById('activity-details');
+    if (!currentActivityNameElement) currentActivityNameElement = document.getElementById('current-activity-name');
+    if (!startTimeElement) startTimeElement = document.getElementById('start-time');
+    if (!durationElement) durationElement = document.getElementById('duration');
+    
+    // 如果关键元素仍未找到，跳过
+    if (!noActivityElement || !activityDetailsElement) {
+        console.warn('⚠️ updateCurrentActivityUI: DOM 元素未找到，跳过');
+        return;
+    }
+    
     if (currentActivity) {
         noActivityElement.classList.add('hidden');
         activityDetailsElement.classList.remove('hidden');
         
-        currentActivityNameElement.textContent = currentActivity.activityName;
-        startTimeElement.textContent = formatDateTime(currentActivity.startTime);
+        if (currentActivityNameElement) currentActivityNameElement.textContent = currentActivity.activityName;
+        if (startTimeElement) startTimeElement.textContent = formatDateTime(currentActivity.startTime);
         updateDurationDisplay();
     } else {
         noActivityElement.classList.remove('hidden');
@@ -601,26 +614,79 @@ function updateDurationDisplay() {
         return;
     }
     
+    // 确保 DOM 元素已初始化
+    if (!durationElement) durationElement = document.getElementById('duration');
+    if (!durationElement) return;
+    
     const now = new Date();
     const duration = calculateDuration(currentActivity.startTime, now);
     durationElement.textContent = formatDuration(duration);
 }
 
+// 规范化活动名（用于去重）
+function normalizeActivityName(name) {
+    return (name || '').trim().toLowerCase();
+}
+
+// 使用 normalizedName + startIso 去重，并打印键集合便于排查
+function dedupeActivities(list) {
+    const deduped = new Map();
+    const keys = [];
+    
+    (list || []).forEach((activity) => {
+        const start = activity.startTime ? new Date(activity.startTime) : null;
+        const startIso = start ? start.toISOString() : 'unknown-start';
+        const key = `${normalizeActivityName(activity.activityName)}|${startIso}`;
+        
+        if (!deduped.has(key)) {
+            deduped.set(key, {
+                ...activity,
+                startTime: start,
+                endTime: activity.endTime ? new Date(activity.endTime) : null
+            });
+            keys.push(key);
+        }
+    });
+    
+    console.log('🧹 去重后的活动键:', keys);
+    return Array.from(deduped.values());
+}
+
 // 更新活动列表
 function updateActivityList() {
+    // 确保 DOM 元素已初始化
+    if (!activityListElement) {
+        activityListElement = document.getElementById('activity-list');
+    }
+    if (!noRecordsElement) {
+        noRecordsElement = document.getElementById('no-records');
+    }
+    if (!activityListElement) {
+        console.warn('⚠️ updateActivityList: activityListElement 未找到，跳过渲染');
+        return;
+    }
+    
+    activities = dedupeActivities(activities);
+    console.log(`📋 渲染前活动条数: ${activities.length}`);
+    
     // 如果没有活动记录，显示提示信息
     if (activities.length === 0) {
-        noRecordsElement.classList.remove('hidden');
+        if (noRecordsElement) noRecordsElement.classList.remove('hidden');
         return;
     }
     
     // 隐藏提示信息
-    noRecordsElement.classList.add('hidden');
+    if (noRecordsElement) noRecordsElement.classList.add('hidden');
     
-    // 清空列表
-    while (activityListElement.firstChild && activityListElement.firstChild !== noRecordsElement) {
-        activityListElement.removeChild(activityListElement.firstChild);
-    }
+    // 清空列表（保留 noRecordsElement）
+    const children = Array.from(activityListElement.children);
+    children.forEach(child => {
+        if (child.id !== 'no-records') {
+            activityListElement.removeChild(child);
+        }
+    });
+    
+    console.log(`🎨 正在渲染 ${activities.length} 条活动记录到 DOM...`);
     
     // 添加活动记录
     activities.forEach(activity => {
@@ -665,12 +731,21 @@ function updateActivityList() {
         activityListElement.appendChild(activityItem);
     });
     
+    console.log(`✅ DOM 渲染完成，当前 activity-list 子元素数: ${activityListElement.children.length}`);
+    
     // 更新活动选择器
     updateActivitySelector();
 }
 
 // 更新活动选择器
 function updateActivitySelector() {
+    // 确保 DOM 元素已初始化
+    if (!activitySelect) activitySelect = document.getElementById('activity-select');
+    if (!activitySelect) {
+        console.warn('⚠️ updateActivitySelector: activitySelect 未找到，跳过');
+        return;
+    }
+    
     // 清空选择器
     activitySelect.innerHTML = '';
     
@@ -811,6 +886,8 @@ async function loadData() {
                 startTime: new Date(activity.startTime),
                 endTime: activity.endTime ? new Date(activity.endTime) : null
             }));
+            // 去重并打印键
+            activities = dedupeActivities(activities);
             
             console.log(`📦 从本地加载了 ${activities.length} 条活动记录`);
             
@@ -896,6 +973,74 @@ async function loadData() {
 
     console.log(`========== 活动记录加载结束 (本地优先，云端后台) ==========`);
     console.log(`📊 总计: ${activities.length}条活动记录\n`);
+}
+
+// 仅基于本地存储强制刷新，供外部/完成动作快速调用
+function refreshActivitiesFromLocal(reason = 'manual') {
+    try {
+        console.log(`🔄 refreshActivitiesFromLocal: ${reason}`);
+        const dataString = localStorage.getItem('timeTrackerData');
+        let parsed = null;
+        if (dataString) {
+            parsed = JSON.parse(dataString);
+        }
+        const nextActivities = parsed?.activities
+            ? dedupeActivities(parsed.activities.map(a => ({
+                ...a,
+                startTime: new Date(a.startTime),
+                endTime: a.endTime ? new Date(a.endTime) : null
+            })))
+            : [];
+        const nextCurrent = parsed?.currentActivity
+            ? {
+                ...parsed.currentActivity,
+                startTime: parsed.currentActivity.startTime ? new Date(parsed.currentActivity.startTime) : null,
+                endTime: parsed.currentActivity.endTime ? new Date(parsed.currentActivity.endTime) : null
+            }
+            : null;
+
+        activities = nextActivities;
+        currentActivity = nextCurrent;
+        console.log(`✅ 本地刷新完成，记录数: ${activities.length}`);
+        return { activities, currentActivity };
+    } catch (error) {
+        console.error('❌ refreshActivitiesFromLocal 失败:', error);
+        return { activities, currentActivity };
+    }
+}
+
+// 页面级强制刷新：本地快速刷新 + UI 更新；后台 Supabase 加载由 loadData 自行处理
+function forceActivityReload(reason = 'manual') {
+    console.log(`⚡ forceActivityReload: ${reason}`);
+    const result = refreshActivitiesFromLocal(reason);
+    updateActivityList();
+    if (currentActivity) {
+        updateCurrentActivityUI();
+        startDurationTimer();
+    } else {
+        updateCurrentActivityUI();
+    }
+    return result;
+}
+
+// 暴露刷新能力到全局，确保多端/其他脚本可调用，并在页面加载/跨标签同步时兜底刷新
+if (typeof window !== 'undefined') {
+    window.forceActivityReload = forceActivityReload;
+    window.refreshActivitiesFromLocal = refreshActivitiesFromLocal;
+
+    // 首屏兜底刷新，避免需要手动刷新才能看到最新记录
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.__forceActivityReloadInitDone) return;
+        window.__forceActivityReloadInitDone = true;
+        forceActivityReload('init');
+    });
+
+    // 监听跨标签更新
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'timeTrackerData') {
+            forceActivityReload('storage');
+        }
+    });
 }
 
 // 工具函数
