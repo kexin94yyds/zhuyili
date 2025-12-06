@@ -339,6 +339,7 @@
             height: 100%;
             transition: transform 0.3s ease, opacity 0.3s ease;
             background-color: #0A0A0A;
+            overflow-y: auto;
         }
         
         .view.hidden {
@@ -366,15 +367,18 @@
             background-color: #0A0A0A;
             color: #FFFFFF;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
         
         .timer-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px;
+            padding: 12px 20px;
             border-bottom: 1px solid #333;
             background: #0A0A0A;
+            flex-shrink: 0;
         }
         
         .timer-activity-title {
@@ -409,13 +413,13 @@
         }
         
         .timer-main-display {
-            flex: 1;
+            flex-shrink: 0;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            padding: 40px 20px;
-            min-height: 300px;
+            padding: 15px 20px;
+            min-height: auto;
         }
         
         .timer-time-display {
@@ -424,14 +428,14 @@
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
             color: #FFFFFF;
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 20px;
             letter-spacing: 0.1em;
         }
         
         .timer-button-area {
             display: flex;
-            gap: 15px;
-            margin-bottom: 40px;
+            gap: 12px;
+            margin-bottom: 15px;
             justify-content: center;
             flex-wrap: wrap;
             /* 与主页按钮区域保持一致 */
@@ -483,11 +487,12 @@
         .timer-lap-container {
             flex: 1;
             background-color: #111;
-            border-radius: 20px 20px 0 0;
-            padding: 20px;
+            border-radius: 15px 15px 0 0;
+            padding: 12px 15px;
             overflow-y: auto;
-            margin: 0 20px 20px 20px;
-            min-height: 200px;
+            margin: 0 15px 0 15px;
+            min-height: 80px;
+            padding-bottom: env(safe-area-inset-bottom, 10px);
         }
         
         .timer-lap-header {
@@ -558,19 +563,102 @@
         
         /* 移动端适配 */
         @media (max-width: 768px) {
+            #timer-detail-view {
+                height: 100vh;
+                height: 100dvh;
+                overflow: hidden;
+            }
+            
+            .timer-header {
+                padding: 10px 15px;
+            }
+            
             .timer-time-display {
-                font-size: 3rem;
+                font-size: 2.8rem;
+                margin-bottom: 15px;
+            }
+            
+            .timer-main-display {
+                padding: 10px 15px;
             }
             
             .timer-button-area {
-                gap: 15px;
+                gap: 10px;
+                margin-bottom: 10px;
             }
             
             .timer-control-btn {
-                min-width: 100px;
-                height: 45px;
+                min-width: 90px;
+                height: 42px;
                 font-size: 14px;
-                padding: 10px 20px;
+                padding: 8px 18px;
+            }
+            
+            .timer-lap-container {
+                margin: 0 10px;
+                min-height: 60px;
+                padding: 10px 12px;
+                padding-bottom: env(safe-area-inset-bottom, 10px);
+            }
+            
+            .timer-lap-header {
+                padding: 0 10px 10px;
+                margin-bottom: 8px;
+                font-size: 13px;
+            }
+            
+            .timer-lap-item {
+                padding: 10px;
+                font-size: 14px;
+            }
+        }
+        
+        /* 横屏模式 */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .timer-header {
+                padding: 8px 15px;
+            }
+            
+            .timer-activity-title {
+                font-size: 16px;
+                letter-spacing: 2px;
+            }
+            
+            .timer-time-display {
+                font-size: 2.2rem;
+                margin-bottom: 10px;
+            }
+            
+            .timer-main-display {
+                padding: 5px 15px;
+            }
+            
+            .timer-button-area {
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+            
+            .timer-control-btn {
+                min-width: 80px;
+                height: 36px;
+                font-size: 13px;
+                padding: 6px 14px;
+            }
+            
+            .timer-lap-container {
+                min-height: 50px;
+                padding: 8px 10px;
+            }
+            
+            .timer-lap-header {
+                padding: 0 8px 6px;
+                margin-bottom: 6px;
+                font-size: 12px;
+            }
+            
+            .timer-lap-item {
+                padding: 6px 8px;
+                font-size: 13px;
             }
         }
         
@@ -587,16 +675,42 @@
         }
         
         @media (max-width: 480px) {
+            .timer-header {
+                padding: 8px 12px;
+            }
+            
+            .timer-activity-title {
+                font-size: 16px;
+                letter-spacing: 2px;
+            }
+            
+            .timer-time-display {
+                font-size: 2.4rem;
+                margin-bottom: 12px;
+            }
+            
+            .timer-main-display {
+                padding: 8px 10px;
+            }
+            
             .timer-button-area {
-                flex-direction: column;
-                align-items: center;
-                gap: 12px;
+                flex-direction: row;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 8px;
             }
             
             .timer-control-btn {
-                width: 180px;
-                height: 48px;
-                font-size: 16px;
+                min-width: 85px;
+                height: 40px;
+                font-size: 14px;
+                padding: 8px 14px;
+            }
+            
+            .timer-lap-container {
+                margin: 0 8px;
+                padding: 8px 10px;
+                min-height: 50px;
             }
         }
     </style>
