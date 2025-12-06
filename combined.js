@@ -689,7 +689,16 @@ function updateActivityList() {
     console.log(`🎨 正在渲染 ${activities.length} 条活动记录到 DOM...`);
     
     // 添加活动记录
-    activities.forEach(activity => {
+    activities.forEach((activity, index) => {
+        // 创建外层wrapper用于滑动
+        const wrapper = document.createElement('div');
+        wrapper.className = 'activity-item-wrapper';
+        wrapper.dataset.index = index;
+        
+        // 创建内容容器
+        const contentContainer = document.createElement('div');
+        contentContainer.className = 'activity-item-content';
+        
         const activityItem = document.createElement('div');
         activityItem.className = 'activity-item';
         activityItem.style.borderLeftColor = getColorForActivity(activity.activityName);
@@ -728,7 +737,24 @@ function updateActivityList() {
         activityItem.appendChild(header);
         activityItem.appendChild(time);
         
-        activityListElement.appendChild(activityItem);
+        contentContainer.appendChild(activityItem);
+        
+        // 创建删除按钮
+        const deleteBtn = document.createElement('div');
+        deleteBtn.className = 'activity-delete-btn';
+        deleteBtn.textContent = '删除';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteActivity(index);
+        };
+        
+        wrapper.appendChild(contentContainer);
+        wrapper.appendChild(deleteBtn);
+        
+        // 添加滑动事件处理
+        setupSwipeToDelete(wrapper);
+        
+        activityListElement.appendChild(wrapper);
     });
     
     console.log(`✅ DOM 渲染完成，当前 activity-list 子元素数: ${activityListElement.children.length}`);
@@ -736,6 +762,157 @@ function updateActivityList() {
     // 更新活动选择器
     updateActivitySelector();
 }
+
+// 删除活动记录
+async function deleteActivity(index) {
+    if (index < 0 || index >= activities.length) {
+        console.warn('⚠️ 无效的活动索引:', index);
+        return;
+    }
+    
+    const activity = activities[index];
+    console.log(`🗑️ 删除活动: ${activity.activityName}, 时长: ${formatDuration(activity.duration)}`);
+    
+    // 从数组中移除
+    activities.splice(index, 1);
+    
+    // 保存数据
+    await saveData();
+    
+    // 重新渲染活动列表
+    updateActivityList();
+    
+    // 更新统计视图
+    if (currentStatsView) {
+        updateStatsView(currentStatsView, selectedActivity);
+    }
+    
+    console.log(`✅ 活动已删除，剩余 ${activities.length} 条记录`);
+}
+
+// 设置滑动删除功能
+function setupSwipeToDelete(wrapper) {
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+    let startTime = 0;
+    const deleteThreshold = 80;
+    const velocityThreshold = 0.5; // 速度阈值，用于快速滑动检测
+    
+    const content = wrapper.querySelector('.activity-item-content');
+    
+    const startDrag = (clientX) => {
+        startX = clientX;
+        currentX = clientX;
+        startTime = Date.now();
+        isDragging = true;
+        wrapper.classList.add('dragging');
+    };
+    
+    const moveDrag = (clientX) => {
+        if (!isDragging) return;
+        currentX = clientX;
+        const diff = startX - currentX;
+        
+        // 只允许向左滑动，添加阻尼效果
+        if (diff > 0) {
+            // 超过阈值后添加阻尼
+            let translateX;
+            if (diff <= deleteThreshold) {
+                translateX = diff;
+            } else {
+                // 阻尼效果：超出部分按30%比例移动
+                translateX = deleteThreshold + (diff - deleteThreshold) * 0.3;
+            }
+            content.style.transform = `translateX(-${translateX}px)`;
+        } else if (diff < 0 && wrapper.classList.contains('swiped')) {
+            // 允许从展开状态向右滑动恢复
+            const translateX = Math.max(0, deleteThreshold + diff);
+            content.style.transform = `translateX(-${translateX}px)`;
+        }
+    };
+    
+    const endDrag = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        wrapper.classList.remove('dragging');
+        
+        const diff = startX - currentX;
+        const duration = Date.now() - startTime;
+        const velocity = Math.abs(diff) / duration;
+        
+        // 快速滑动或滑动超过一半阈值则展开
+        const shouldOpen = (diff > 0 && (velocity > velocityThreshold || diff > deleteThreshold / 2));
+        // 快速向右滑动或滑动回超过一半则关闭
+        const shouldClose = wrapper.classList.contains('swiped') && 
+                           (diff < 0 && (velocity > velocityThreshold || Math.abs(diff) > deleteThreshold / 2));
+        
+        if (shouldOpen && !wrapper.classList.contains('swiped')) {
+            content.style.transform = `translateX(-${deleteThreshold}px)`;
+            wrapper.classList.add('swiped');
+            closeOtherSwipedItems(wrapper);
+        } else if (shouldClose || (!shouldOpen && !wrapper.classList.contains('swiped'))) {
+            content.style.transform = 'translateX(0)';
+            wrapper.classList.remove('swiped');
+        } else if (wrapper.classList.contains('swiped')) {
+            // 保持当前展开状态
+            content.style.transform = `translateX(-${deleteThreshold}px)`;
+        }
+    };
+    
+    // 触摸事件（移动端）
+    wrapper.addEventListener('touchstart', (e) => {
+        startDrag(e.touches[0].clientX);
+    }, { passive: true });
+    
+    wrapper.addEventListener('touchmove', (e) => {
+        moveDrag(e.touches[0].clientX);
+    }, { passive: true });
+    
+    wrapper.addEventListener('touchend', endDrag);
+    wrapper.addEventListener('touchcancel', endDrag);
+    
+    // 鼠标事件（桌面端）
+    wrapper.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('activity-delete-btn')) return;
+        startDrag(e.clientX);
+        e.preventDefault();
+    });
+    
+    wrapper.addEventListener('mousemove', (e) => {
+        moveDrag(e.clientX);
+    });
+    
+    wrapper.addEventListener('mouseleave', () => {
+        if (isDragging) endDrag();
+    });
+    
+    document.addEventListener('mouseup', endDrag);
+}
+
+// 关闭其他已展开的滑动项
+function closeOtherSwipedItems(currentWrapper) {
+    const allWrappers = document.querySelectorAll('.activity-item-wrapper.swiped');
+    allWrappers.forEach(wrapper => {
+        if (wrapper !== currentWrapper) {
+            const content = wrapper.querySelector('.activity-item-content');
+            content.style.transform = 'translateX(0)';
+            wrapper.classList.remove('swiped');
+        }
+    });
+}
+
+// 点击其他区域关闭所有展开的滑动项
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.activity-item-wrapper')) {
+        const allWrappers = document.querySelectorAll('.activity-item-wrapper.swiped');
+        allWrappers.forEach(wrapper => {
+            const content = wrapper.querySelector('.activity-item-content');
+            content.style.transform = 'translateX(0)';
+            wrapper.classList.remove('swiped');
+        });
+    }
+});
 
 // 更新活动选择器
 function updateActivitySelector() {
