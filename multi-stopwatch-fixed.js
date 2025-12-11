@@ -247,7 +247,28 @@ class MultiStopwatchManager {
                 
             case 'complete':
                 // 直接完成，无需确认对话框，但显示绿色通知
+                // #region agent log
+                try {
+                    const t = this.getTimer(this.currentTimerActivity);
+                    const ttd = localStorage.getItem('timeTrackerData');
+                    const tta = localStorage.getItem('timeTrackerActivities');
+                    fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H6',location:'multi-stopwatch-fixed.js:handleTimerDetailButtonAction:complete:before',message:'Detail complete BEFORE completeActivityAndReset',data:{activity:this.currentTimerActivity,currentView:this.currentView,hasForceActivityReload:typeof window.forceActivityReload==='function',hasRefreshActivitiesFromLocal:typeof window.refreshActivitiesFromLocal==='function',timer:{isRunning:!!t?.isRunning,elapsedTime:t?.elapsedTime,startTime:t?.startTime},timeTrackerDataSize:ttd?ttd.length:0,timeTrackerActivitiesSize:tta?tta.length:0},timestamp:Date.now()})}).catch(()=>{});
+                } catch (_) {}
+                // #endregion
                 this.completeActivityAndReset(this.currentTimerActivity);
+                // #region agent log
+                try {
+                    const ttd2 = localStorage.getItem('timeTrackerData');
+                    const tta2 = localStorage.getItem('timeTrackerActivities');
+                    let parsed = null;
+                    try { parsed = ttd2 ? JSON.parse(ttd2) : null; } catch (_) { parsed = { parseError: true }; }
+                    const activitiesCount = Array.isArray(parsed?.activities) ? parsed.activities.length : null;
+                    const head = Array.isArray(parsed?.activities) && parsed.activities[0]
+                        ? { activityName: parsed.activities[0].activityName, duration: parsed.activities[0].duration, id: parsed.activities[0].id }
+                        : null;
+                    fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H6',location:'multi-stopwatch-fixed.js:handleTimerDetailButtonAction:complete:after',message:'Detail complete AFTER completeActivityAndReset (local writes expected)',data:{activity:this.currentTimerActivity,timeTrackerDataSize:ttd2?ttd2.length:0,timeTrackerActivitiesSize:tta2?tta2.length:0,activitiesCount,latestActivityHead:head},timestamp:Date.now()})}).catch(()=>{});
+                } catch (_) {}
+                // #endregion
                 this.showNotification(`\"${this.currentTimerActivity}\" 活动已完成并保存`, 'success');
                 // 完成后返回主视图
                 this.showMainView();
