@@ -369,6 +369,47 @@ input[type="text"]::placeholder {
     width: 100%;
 }
 
+.timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.timeline-header h2 {
+    margin-bottom: 0;
+}
+
+.record-filter {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.record-filter-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e0e0e0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.record-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.record-filter-btn.active {
+    background: rgba(74, 144, 226, 0.22);
+    border-color: rgba(74, 144, 226, 0.55);
+    color: #f0f0f0;
+}
+
 .activity-list {
     display: flex;
     flex-direction: column;

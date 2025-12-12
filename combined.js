@@ -792,13 +792,13 @@ function updateActivityList() {
         
         contentContainer.appendChild(activityItem);
         
-        // 创建删除按钮
+        // 创建删除按钮（使用 activity.id 而不是 index，因为可能是过滤后的列表）
         const deleteBtn = document.createElement('div');
         deleteBtn.className = 'activity-delete-btn';
         deleteBtn.textContent = '删除';
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
-            deleteActivity(index);
+            deleteActivityById(activity.id || activity.startTime?.toISOString());
         };
         
         wrapper.appendChild(contentContainer);
@@ -816,10 +816,15 @@ function updateActivityList() {
     updateActivitySelector();
 }
 
-// 删除活动记录
-async function deleteActivity(index) {
-    if (index < 0 || index >= activities.length) {
-        console.warn('⚠️ 无效的活动索引:', index);
+// 删除活动记录（通过 ID 或 startTime）
+async function deleteActivityById(activityKey) {
+    const index = activities.findIndex(a => 
+        (a.id && a.id === activityKey) || 
+        (a.startTime && a.startTime.toISOString() === activityKey)
+    );
+    
+    if (index < 0) {
+        console.warn('⚠️ 未找到要删除的活动:', activityKey);
         return;
     }
     
