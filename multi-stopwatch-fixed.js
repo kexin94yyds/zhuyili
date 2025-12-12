@@ -1455,6 +1455,36 @@ class MultiStopwatchManager {
             }
         }
 
+        // 合并现有 timeTrackerData.activities（可能包含云端合并进来的历史记录），避免被覆盖丢失
+        let existingAllActivities = [];
+        try {
+            const existingTTD = localStorage.getItem('timeTrackerData');
+            if (existingTTD) {
+                const parsed = JSON.parse(existingTTD);
+                if (Array.isArray(parsed?.activities)) existingAllActivities = parsed.activities;
+            }
+        } catch (_) {}
+
+        // 以“id 优先，其次 name+startTime”为键做并集，保持“最新在前”
+        const getActKey = (a) => {
+            if (!a) return 'null';
+            if (a.id) return `id:${a.id}`;
+            const name = (a.activityName || a.activity_name || '').toString();
+            const norm = this.normalizeActivityName(name);
+            let startIso = 'unknown-start';
+            try {
+                const d = a.startTime ? new Date(a.startTime) : null;
+                startIso = d && !isNaN(d.getTime()) ? d.toISOString() : startIso;
+            } catch (_) {}
+            return `k:${norm}|${startIso}`;
+        };
+        const mergedMap = new Map();
+        [...completedActivities, ...existingAllActivities].forEach((a) => {
+            const k = getActKey(a);
+            if (!mergedMap.has(k)) mergedMap.set(k, a);
+        });
+        const mergedActivities = Array.from(mergedMap.values());
+
         // 保存当前正在运行的活动状态（如果有的话）
         let currentActivity = null;
         this.timers.forEach((timer, name) => {
@@ -1471,9 +1501,23 @@ class MultiStopwatchManager {
 
         // 保存兼容格式的数据供统计系统使用
         const compatibleData = {
-            activities: completedActivities,
+            activities: mergedActivities,
             currentActivity: currentActivity
         };
+
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H7',location:'multi-stopwatch-fixed.js:saveCompatibleData:merge',message:'saveCompatibleData merged activities',data:{timeTrackerActivitiesCount:completedActivities.length,timeTrackerDataExistingCount:existingAllActivities.length,mergedCount:mergedActivities.length,hasCurrentRunning:!!currentActivity},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+
+        // #region DEBUG-LOG-3: 合并后写入 TTD 前
+        let _dbg_merged_dateRange = 'N/A';
+        try {
+            const dates = mergedActivities.map(a => new Date(a.startTime || a.start_time || 0).toISOString().slice(0,10)).filter(d => d !== '1970-01-01');
+            const unique = [...new Set(dates)].sort();
+            _dbg_merged_dateRange = unique.length > 0 ? `${unique[0]}~${unique[unique.length-1]}` : 'N/A';
+        } catch (_) {}
+        console.log(`🔍 [DEBUG-3] saveCompatibleData合并: TTA=${completedActivities.length}, TTD.activities原=${existingAllActivities.length}, 合并后=${mergedActivities.length}条(${_dbg_merged_dateRange})`);
+        // #endregion
 
         localStorage.setItem('timeTrackerData', JSON.stringify(compatibleData));
     }
@@ -1482,6 +1526,33 @@ class MultiStopwatchManager {
     async completeActivity(activityName, startTime, endTime) {
         console.log(`\n💾 ========== 保存活动记录 ==========`);
         console.log(`📌 活动: "${activityName}"`);
+        
+        // #region DEBUG-LOG-1: 记录完成前的数据状态
+        const _dbg_tta_before = localStorage.getItem('timeTrackerActivities');
+        const _dbg_ttd_before = localStorage.getItem('timeTrackerData');
+        let _dbg_tta_count_before = 0, _dbg_ttd_count_before = 0;
+        let _dbg_tta_dateRange = 'N/A', _dbg_ttd_dateRange = 'N/A';
+        try {
+            const arr1 = _dbg_tta_before ? JSON.parse(_dbg_tta_before) : [];
+            _dbg_tta_count_before = arr1.length;
+            if (arr1.length > 0) {
+                const dates1 = arr1.map(a => new Date(a.startTime || a.start_time || 0).toISOString().slice(0,10)).filter(d => d !== '1970-01-01');
+                const unique1 = [...new Set(dates1)].sort();
+                _dbg_tta_dateRange = unique1.length > 0 ? `${unique1[0]}~${unique1[unique1.length-1]}` : 'N/A';
+            }
+        } catch (_) {}
+        try {
+            const parsed2 = _dbg_ttd_before ? JSON.parse(_dbg_ttd_before) : {};
+            const arr2 = Array.isArray(parsed2.activities) ? parsed2.activities : [];
+            _dbg_ttd_count_before = arr2.length;
+            if (arr2.length > 0) {
+                const dates2 = arr2.map(a => new Date(a.startTime || a.start_time || 0).toISOString().slice(0,10)).filter(d => d !== '1970-01-01');
+                const unique2 = [...new Set(dates2)].sort();
+                _dbg_ttd_dateRange = unique2.length > 0 ? `${unique2[0]}~${unique2[unique2.length-1]}` : 'N/A';
+            }
+        } catch (_) {}
+        console.log(`🔍 [DEBUG-1] 完成前状态: TTA=${_dbg_tta_count_before}条(${_dbg_tta_dateRange}), TTD=${_dbg_ttd_count_before}条(${_dbg_ttd_dateRange})`);
+        // #endregion
         
         let completedActivities = [];
         
@@ -1522,6 +1593,10 @@ class MultiStopwatchManager {
         // 保存更新后的记录到本地
         localStorage.setItem('timeTrackerActivities', JSON.stringify(completedActivities));
         console.log(`✅ 已保存到本地存储 (持续 ${Math.floor((activityRecord.durationMs || 0) / 1000)} 秒 / ${activityRecord.duration} 分钟)`);
+        
+        // #region DEBUG-LOG-2: 写入 TTA 后立即记录
+        console.log(`🔍 [DEBUG-2] 写入TTA后: ${completedActivities.length}条`);
+        // #endregion
         
         // 更新兼容数据
         this.saveCompatibleData();

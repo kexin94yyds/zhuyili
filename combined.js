@@ -16,6 +16,9 @@ let currentStatsView = STATS_VIEW.DAILY_DISTRIBUTION;
 // 当前选中的活动（用于活动每日统计和累计统计）
 let selectedActivity = null;
 
+// 活动记录过滤模式：'today' 或 'all'
+let activityRecordFilter = 'today';
+
 // DOM 元素
 let currentTimeElement;
 let activityNameInput;
@@ -289,9 +292,42 @@ function initApp() {
     // 初始化年度统计表
     initAnnualTable();
     
+    // 初始化活动记录过滤按钮
+    initActivityRecordFilter();
+    
     // 预加载 Chart.js（空闲时），不触发统计计算，保证首次打开统计更快
     const prefetchCharts = () => { try { ensureChartJS(); } catch (_) {} };
     if ('requestIdleCallback' in window) requestIdleCallback(prefetchCharts, { timeout: 1500 }); else setTimeout(prefetchCharts, 800);
+}
+
+// 初始化活动记录过滤按钮（当天/全部）
+function initActivityRecordFilter() {
+    const todayBtn = document.getElementById('activity-records-today-btn');
+    const allBtn = document.getElementById('activity-records-all-btn');
+    
+    if (!todayBtn || !allBtn) {
+        console.warn('⚠️ 活动记录过滤按钮未找到');
+        return;
+    }
+    
+    // 默认选中"当天记录"
+    todayBtn.classList.add('active');
+    
+    todayBtn.addEventListener('click', () => {
+        activityRecordFilter = 'today';
+        todayBtn.classList.add('active');
+        allBtn.classList.remove('active');
+        updateActivityList();
+        console.log('📋 切换到当天记录');
+    });
+    
+    allBtn.addEventListener('click', () => {
+        activityRecordFilter = 'all';
+        allBtn.classList.add('active');
+        todayBtn.classList.remove('active');
+        updateActivityList();
+        console.log('📋 切换到全部记录');
+    });
 }
 
 // 初始化用户下拉菜单
@@ -667,16 +703,19 @@ function updateActivityList() {
     }
     
     activities = dedupeActivities(activities);
-    console.log(`📋 渲染前活动条数: ${activities.length}`);
+    console.log(`📋 全部活动条数: ${activities.length}`);
     
-    // 如果没有活动记录，显示提示信息
-    if (activities.length === 0) {
-        if (noRecordsElement) noRecordsElement.classList.remove('hidden');
-        return;
+    // 根据过滤模式筛选要显示的活动
+    let displayActivities = activities;
+    if (activityRecordFilter === 'today') {
+        const todayStr = new Date().toISOString().split('T')[0];
+        displayActivities = activities.filter(a => {
+            if (!a.startTime) return false;
+            const activityDateStr = new Date(a.startTime).toISOString().split('T')[0];
+            return activityDateStr === todayStr;
+        });
+        console.log(`📋 今日活动条数: ${displayActivities.length}`);
     }
-    
-    // 隐藏提示信息
-    if (noRecordsElement) noRecordsElement.classList.add('hidden');
     
     // 清空列表（保留 noRecordsElement）
     const children = Array.from(activityListElement.children);
@@ -686,10 +725,24 @@ function updateActivityList() {
         }
     });
     
-    console.log(`🎨 正在渲染 ${activities.length} 条活动记录到 DOM...`);
+    // 如果没有要显示的活动记录，显示提示信息
+    if (displayActivities.length === 0) {
+        if (noRecordsElement) {
+            noRecordsElement.classList.remove('hidden');
+            noRecordsElement.textContent = activityRecordFilter === 'today' 
+                ? '今天暂无活动记录' 
+                : '暂无活动记录';
+        }
+        return;
+    }
     
-    // 添加活动记录
-    activities.forEach((activity, index) => {
+    // 隐藏提示信息
+    if (noRecordsElement) noRecordsElement.classList.add('hidden');
+    
+    console.log(`🎨 正在渲染 ${displayActivities.length} 条活动记录到 DOM...`);
+    
+    // 添加活动记录（使用过滤后的列表）
+    displayActivities.forEach((activity, index) => {
         // 创建外层wrapper用于滑动
         const wrapper = document.createElement('div');
         wrapper.className = 'activity-item-wrapper';
@@ -1161,6 +1214,21 @@ function refreshActivitiesFromLocal(reason = 'manual') {
         if (dataString) {
             parsed = JSON.parse(dataString);
         }
+        
+        // #region DEBUG-LOG-4: 刷新时读取到的数据
+        let _dbg_raw_count = 0, _dbg_dateRange = 'N/A';
+        try {
+            const rawArr = parsed?.activities || [];
+            _dbg_raw_count = rawArr.length;
+            if (rawArr.length > 0) {
+                const dates = rawArr.map(a => new Date(a.startTime || a.start_time || 0).toISOString().slice(0,10)).filter(d => d !== '1970-01-01');
+                const unique = [...new Set(dates)].sort();
+                _dbg_dateRange = unique.length > 0 ? `${unique[0]}~${unique[unique.length-1]}` : 'N/A';
+            }
+        } catch (_) {}
+        console.log(`🔍 [DEBUG-4] refreshActivitiesFromLocal(${reason}): TTD.activities=${_dbg_raw_count}条(${_dbg_dateRange})`);
+        // #endregion
+        
         const nextActivities = parsed?.activities
             ? dedupeActivities(parsed.activities.map(a => ({
                 ...a,
@@ -1178,6 +1246,19 @@ function refreshActivitiesFromLocal(reason = 'manual') {
 
         activities = nextActivities;
         currentActivity = nextCurrent;
+        
+        // #region DEBUG-LOG-5: 去重后的数据
+        let _dbg_deduped_dateRange = 'N/A';
+        try {
+            if (activities.length > 0) {
+                const dates = activities.map(a => new Date(a.startTime || 0).toISOString().slice(0,10)).filter(d => d !== '1970-01-01');
+                const unique = [...new Set(dates)].sort();
+                _dbg_deduped_dateRange = unique.length > 0 ? `${unique[0]}~${unique[unique.length-1]}` : 'N/A';
+            }
+        } catch (_) {}
+        console.log(`🔍 [DEBUG-5] 去重后显示: ${activities.length}条(${_dbg_deduped_dateRange})`);
+        // #endregion
+        
         console.log(`✅ 本地刷新完成，记录数: ${activities.length}`);
         return { activities, currentActivity };
     } catch (error) {
