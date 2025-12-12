@@ -1511,14 +1511,17 @@ class MultiStopwatchManager {
             activityName: activityName,
             startTime: actualStartTime,
             endTime: actualEndTime,
-            duration: Math.floor(actualDuration / (1000 * 60)) // 使用实际持续时间
+            // 兼容字段：旧系统仍用分钟做统计
+            duration: Math.floor(actualDuration / (1000 * 60)),
+            // 新字段：用于主页面“活动记录”精确显示（避免 <1 分钟显示 0）
+            durationMs: actualDuration
         };
 
         completedActivities.unshift(activityRecord);
         
         // 保存更新后的记录到本地
         localStorage.setItem('timeTrackerActivities', JSON.stringify(completedActivities));
-        console.log(`✅ 已保存到本地存储 (持续 ${activityRecord.duration} 分钟)`);
+        console.log(`✅ 已保存到本地存储 (持续 ${Math.floor((activityRecord.durationMs || 0) / 1000)} 秒 / ${activityRecord.duration} 分钟)`);
         
         // 更新兼容数据
         this.saveCompatibleData();
@@ -1656,7 +1659,10 @@ class MultiStopwatchManager {
             activityName,
             startTime: new Date(actualStartTime),
             endTime: new Date(actualEndTime),
-            duration: Math.floor((actualDurationMs || 0) / (1000 * 60))
+            // 兼容字段：旧系统仍用分钟做统计
+            duration: Math.floor((actualDurationMs || 0) / (1000 * 60)),
+            // 新字段：用于主页面“活动记录”精确显示
+            durationMs: actualDurationMs || 0
         };
 
         completedActivities.unshift(activityRecord);
@@ -2054,10 +2060,12 @@ window.addEventListener('beforeunload', () => {
             }
         });
         window.addEventListener('storage', (e) => {
+            // 只处理/记录 multiStopwatchData，避免把 auth token 等敏感信息写入日志
+            if (e.key !== 'multiStopwatchData') return;
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:storage',message:'storage事件触发',data:{key:e.key,newValue:e.newValue?e.newValue.substring(0,300):'null'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:storage',message:'storage事件触发(multiStopwatchData)',data:{key:e.key,newValueSize:e.newValue?e.newValue.length:0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
-            if (e.key === 'multiStopwatchData' && window.multiStopwatchManager) {
+            if (window.multiStopwatchManager) {
                 window.multiStopwatchManager.loadLocalDataOnly();
                 window.multiStopwatchManager.updateMainPageUI();
                 window.multiStopwatchManager.startRealTimeUpdate();

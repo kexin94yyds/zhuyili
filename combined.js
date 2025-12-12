@@ -717,7 +717,7 @@ function updateActivityList() {
         
         const duration = document.createElement('div');
         duration.className = 'activity-item-duration';
-        duration.textContent = formatDuration(activity.duration);
+        duration.textContent = formatActivityDuration(activity);
         
         header.appendChild(name);
         header.appendChild(duration);
@@ -771,7 +771,7 @@ async function deleteActivity(index) {
     }
     
     const activity = activities[index];
-    console.log(`🗑️ 删除活动: ${activity.activityName}, 时长: ${formatDuration(activity.duration)}`);
+    console.log(`🗑️ 删除活动: ${activity.activityName}, 时长: ${formatActivityDuration(activity)}`);
     
     // 从数组中移除
     activities.splice(index, 1);
@@ -1263,6 +1263,23 @@ function formatDuration(minutes) {
     }
     
     return `${hours} 小时 ${remainingMinutes} 分钟`;
+}
+
+// 活动记录显示用：优先展示精确时长（秒级），无则回退到分钟
+function formatActivityDuration(activity) {
+    const ms = typeof activity?.durationMs === 'number'
+        ? activity.durationMs
+        : (typeof activity?.duration_ms === 'number' ? activity.duration_ms : null);
+    if (typeof ms === 'number' && isFinite(ms) && ms >= 0) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        if (hours > 0) return `${hours}小时 ${minutes}分钟 ${seconds}秒`;
+        if (minutes > 0) return `${minutes}分钟 ${seconds}秒`;
+        return `${seconds}秒`;
+    }
+    return formatDuration(activity?.duration || 0);
 }
 
 // 根据活动名称生成颜色（优化版，确保每个活动都有独特颜色）
@@ -2050,7 +2067,7 @@ function showActivityDetails(day, month, activities) {
                         ${formatDateTime(new Date(activity.endTime))}
                     </div>
                     <div class="activity-duration">
-                        时长: ${formatDuration(activity.duration)}
+                        时长: ${formatActivityDuration(activity)}
                     </div>
                     ${activity.note ? `<div class="activity-note">备注: ${activity.note}</div>` : ''}
                 </div>
