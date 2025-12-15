@@ -32,6 +32,35 @@ class MultiStopwatchManager {
         this.loadLocalDataOnly();
         this.initMainPageUI();
         Promise.resolve().then(() => this.loadCloudDataInBackground());
+        
+        // 页面可见性监听：页面不可见时自动暂停所有运行中的计时器
+        this.initVisibilityChangeHandler();
+    }
+
+    // ========== 页面可见性管理 ==========
+    
+    // 初始化页面可见性变化监听
+    initVisibilityChangeHandler() {
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // 页面不可见（后台、息屏等）→ 暂停所有运行中的计时器
+                let pausedCount = 0;
+                this.timers.forEach((timer, name) => {
+                    if (timer.isRunning) {
+                        this.stop(name);
+                        pausedCount++;
+                        console.log(`⏸️ 页面隐藏，自动暂停计时器: "${name}"`);
+                    }
+                });
+                if (pausedCount > 0) {
+                    console.log(`📱 页面不可见，已自动暂停 ${pausedCount} 个计时器`);
+                }
+            } else {
+                // 页面恢复可见 → 不自动恢复，保持暂停状态
+                console.log('📱 页面恢复可见，计时器保持暂停状态');
+            }
+        });
+        console.log('✅ 页面可见性监听已启用');
     }
 
     // ========== 视图管理函数 ==========
