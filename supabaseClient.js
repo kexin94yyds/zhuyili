@@ -5,14 +5,14 @@
 const SUPABASE_URL = 'https://dpmrdhjltbhbhguuwxwy.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRwbXJkaGpsdGJoYmhndXV3eHd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5MTE0ODgsImV4cCI6MjA3MjQ4NzQ4OH0.P8LgzNlDVXc3criWEQ3RPwKKeMb3OG8KsCtTYpiUA-w';
 // 创建 Supabase 客户端
-let supabase = null;
+let supabaseInstance = null;
 
 // 初始化 Supabase 客户端
 function initSupabaseClient() {
     try {
         // 检查 Supabase 是否已加载
         if (typeof window.supabase !== 'undefined') {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             console.log('✅ Supabase 客户端初始化成功');
             return true;
         } else {
@@ -20,7 +20,7 @@ function initSupabaseClient() {
             // 等待 Supabase SDK 加载完成
             setTimeout(() => {
                 if (typeof window.supabase !== 'undefined') {
-                    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                     console.log('✅ Supabase 客户端延迟初始化成功');
                 }
             }, 1000);
@@ -35,18 +35,18 @@ function initSupabaseClient() {
 // 导出到全局作用域（浏览器兼容）
 window.supabaseClient = {
     init: initSupabaseClient,
-    getClient: () => supabase,
-    isConnected: () => supabase !== null,
+    getClient: () => supabaseInstance,
+    isConnected: () => supabaseInstance !== null,
     // 测试连接
     testConnection: async function() {
-        if (!supabase) {
+        if (!supabaseInstance) {
             console.log('❌ Supabase 客户端未初始化');
             return false;
         }
         
         try {
             // 尝试获取当前用户（不需要登录）
-            const { data, error } = await supabase.auth.getUser();
+            const { data, error } = await supabaseInstance.auth.getUser();
             if (error && error.message !== 'Invalid JWT') {
                 console.log('❌ Supabase 连接测试失败:', error.message);
                 return false;
