@@ -276,28 +276,7 @@ class MultiStopwatchManager {
                 
             case 'complete':
                 // 直接完成，无需确认对话框，但显示绿色通知
-                // #region agent log
-                try {
-                    const t = this.getTimer(this.currentTimerActivity);
-                    const ttd = localStorage.getItem('timeTrackerData');
-                    const tta = localStorage.getItem('timeTrackerActivities');
-                    fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H6',location:'multi-stopwatch-fixed.js:handleTimerDetailButtonAction:complete:before',message:'Detail complete BEFORE completeActivityAndReset',data:{activity:this.currentTimerActivity,currentView:this.currentView,hasForceActivityReload:typeof window.forceActivityReload==='function',hasRefreshActivitiesFromLocal:typeof window.refreshActivitiesFromLocal==='function',timer:{isRunning:!!t?.isRunning,elapsedTime:t?.elapsedTime,startTime:t?.startTime},timeTrackerDataSize:ttd?ttd.length:0,timeTrackerActivitiesSize:tta?tta.length:0},timestamp:Date.now()})}).catch(()=>{});
-                } catch (_) {}
-                // #endregion
                 this.completeActivityAndReset(this.currentTimerActivity);
-                // #region agent log
-                try {
-                    const ttd2 = localStorage.getItem('timeTrackerData');
-                    const tta2 = localStorage.getItem('timeTrackerActivities');
-                    let parsed = null;
-                    try { parsed = ttd2 ? JSON.parse(ttd2) : null; } catch (_) { parsed = { parseError: true }; }
-                    const activitiesCount = Array.isArray(parsed?.activities) ? parsed.activities.length : null;
-                    const head = Array.isArray(parsed?.activities) && parsed.activities[0]
-                        ? { activityName: parsed.activities[0].activityName, duration: parsed.activities[0].duration, id: parsed.activities[0].id }
-                        : null;
-                    fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H6',location:'multi-stopwatch-fixed.js:handleTimerDetailButtonAction:complete:after',message:'Detail complete AFTER completeActivityAndReset (local writes expected)',data:{activity:this.currentTimerActivity,timeTrackerDataSize:ttd2?ttd2.length:0,timeTrackerActivitiesSize:tta2?tta2.length:0,activitiesCount,latestActivityHead:head},timestamp:Date.now()})}).catch(()=>{});
-                } catch (_) {}
-                // #endregion
                 this.showNotification(`\"${this.currentTimerActivity}\" 活动已完成并保存`, 'success');
                 // 完成后返回主视图
                 this.showMainView();
@@ -446,22 +425,30 @@ class MultiStopwatchManager {
         }, 3000);
     }
     
-    // 初始化 Supabase 客户端
-    initSupabase() {
-        console.log('🚀 MultiStopwatchManager: 开始初始化 Supabase...');
-        console.log('🔍 检查 window.supabaseClient:', !!window.supabaseClient);
+    // 初始化 Supabase 客户端（带重试机制）
+    initSupabase(retryCount = 0) {
+        const maxRetries = 10;
+        console.log(`🚀 MultiStopwatchManager: 开始初始化 Supabase... (尝试 ${retryCount + 1}/${maxRetries})`);
         
         try {
             if (window.supabaseClient && window.supabaseClient.init()) {
                 this.supabase = window.supabaseClient.getClient();
                 console.log('✅ MultiStopwatchManager: Supabase 客户端初始化成功');
-                console.log('🔗 Supabase 客户端对象:', this.supabase);
+                // 初始化成功后，重新触发云端数据加载
+                if (retryCount > 0) {
+                    this.loadCloudDataInBackground();
+                }
+            } else if (retryCount < maxRetries) {
+                console.warn(`⚠️ Supabase 未就绪，${500}ms 后重试...`);
+                setTimeout(() => this.initSupabase(retryCount + 1), 500);
             } else {
-                console.warn('⚠️ MultiStopwatchManager: Supabase 客户端初始化失败');
-                console.log('❌ 可能的原因: supabaseClient 未定义或 init() 返回 false');
+                console.error('❌ MultiStopwatchManager: Supabase 初始化失败，已达最大重试次数');
             }
         } catch (error) {
             console.error('❌ MultiStopwatchManager: Supabase 初始化失败:', error);
+            if (retryCount < maxRetries) {
+                setTimeout(() => this.initSupabase(retryCount + 1), 500);
+            }
         }
     }
     
@@ -510,9 +497,6 @@ class MultiStopwatchManager {
         this.__d('start()', { activityName, intervalsBefore: this.updateIntervals.size });
         
         const timer = this.getTimer(activityName);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:start',message:'start() 被调用',data:{activityName,elapsedTimeBefore:timer.elapsedTime,isRunningBefore:timer.isRunning,startTimeBefore:timer.startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         if (!timer.isRunning) {
             timer.startTime = Date.now() - timer.elapsedTime;
             timer.isRunning = true;
@@ -569,9 +553,6 @@ class MultiStopwatchManager {
             const endTime = Date.now();
             const calculatedElapsed = endTime - timer.startTime;
             timer.elapsedTime = calculatedElapsed;
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:stop',message:'stop() 计算elapsedTime',data:{activityName,startTime:timer.startTime,endTime,calculatedElapsed,previousElapsed:timer.elapsedTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'ALL'})}).catch(()=>{});
-            // #endregion
             
             // 立即清除所有相关的更新循环
             if (this.updateIntervals.has(activityName)) {
@@ -611,9 +592,6 @@ class MultiStopwatchManager {
     // 重置计时器
     reset(activityName) {
         console.log(`🔄 重置计时器: "${activityName}"`);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:reset',message:'reset() 被调用 - 时间将归零',data:{activityName,callerStack:new Error().stack},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         
         const timer = this.getTimer(activityName);
         
@@ -699,11 +677,6 @@ class MultiStopwatchManager {
         } else {
             currentTime = timer.elapsedTime;
         }
-        // #region agent log
-        if (currentTime === 0 || currentTime < 0) {
-            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:getCurrentTime',message:'⚠️ 检测到时间为0或负数！',data:{activityName,currentTime,isRunning:timer.isRunning,startTime:timer.startTime,elapsedTime:timer.elapsedTime,now:Date.now()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'ALL'})}).catch(()=>{});
-        }
-        // #endregion
         return currentTime;
     }
 
@@ -1253,11 +1226,6 @@ class MultiStopwatchManager {
         const timer = this.getTimer(activityName);
         const currentTime = this.getCurrentTime(activityName);
         
-        // #region agent log
-        if (currentTime === 0 && timer.elapsedTime > 0) {
-            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:updateTimerCard',message:'⚠️ 显示时间为0但elapsedTime不为0！',data:{activityName,currentTime,elapsedTime:timer.elapsedTime,isRunning:timer.isRunning,startTime:timer.startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'ALL'})}).catch(()=>{});
-        }
-        // #endregion
         
         // 更新时间显示
         const timeElement = card.querySelector('.timer-time');
@@ -1371,9 +1339,6 @@ class MultiStopwatchManager {
                 console.log(`⏱️ [FIX] 计时器"${name}"正在运行，实时计算 elapsedTime: ${Math.floor(savedElapsedTime / 1000)}秒`);
             }
             
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:saveData:FIX',message:'保存计时器数据',data:{name,savedElapsedTime,originalElapsedTime:timer.elapsedTime,isRunning:timer.isRunning,startTime:timer.startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FIX'})}).catch(()=>{});
-            // #endregion
             
             data[name] = { 
                 ...timer,
@@ -1534,9 +1499,6 @@ class MultiStopwatchManager {
             currentActivity: currentActivity
         };
 
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H7',location:'multi-stopwatch-fixed.js:saveCompatibleData:merge',message:'saveCompatibleData merged activities',data:{timeTrackerActivitiesCount:completedActivities.length,timeTrackerDataExistingCount:existingAllActivities.length,mergedCount:mergedActivities.length,hasCurrentRunning:!!currentActivity},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
 
         // #region DEBUG-LOG-3: 合并后写入 TTD 前
         let _dbg_merged_dateRange = 'N/A';
@@ -1812,9 +1774,6 @@ class MultiStopwatchManager {
         console.log(`📌 活动名称: "${activityName}"`);
         console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
         console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:completeActivityAndReset',message:'completeActivityAndReset() 被调用 - 即将重置',data:{activityName,callerStack:new Error().stack},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         
         const timer = this.getTimer(activityName);
         const endTime = Date.now();
@@ -1898,16 +1857,10 @@ class MultiStopwatchManager {
     loadLocalDataOnly() {
         console.log('\n🔍 [fast] 从本地存储加载计时器...');
         const data = localStorage.getItem('multiStopwatchData');
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:loadLocalDataOnly',message:'加载本地数据',data:{hasData:!!data,dataPreview:data?data.substring(0,500):'null'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         if (data) {
             try {
                 const parsed = JSON.parse(data);
                 Object.entries(parsed).forEach(([name, timer]) => {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:loadLocalDataOnly:timer',message:'加载单个计时器',data:{name,elapsedTime:timer.elapsedTime,isRunning:timer.isRunning},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-                    // #endregion
                     this.timers.set(name, { ...timer });
                     if (timer.isRunning) {
                         const intervalId = setInterval(() => {
@@ -1952,9 +1905,6 @@ class MultiStopwatchManager {
                     localElapsedTime = Date.now() - existingTimer.startTime;
                 }
                 
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:loadCloudDataInBackground',message:'云端数据比较',data:{name,cloudElapsed:timerData.elapsed_time_ms,localElapsed:localElapsedTime,localIsRunning:existingTimer?.isRunning,cloudUpdatedAt:cloudUpdatedAt.toISOString(),localUpdatedAt:localUpdatedAt.toISOString(),willOverwrite:!existingTimer||cloudUpdatedAt>localUpdatedAt},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-                // #endregion
                 
                 // *** 关键修复：如果本地计时器正在运行且有更多时间，不要覆盖 ***
                 if (existingTimer?.isRunning && localElapsedTime > (timerData.elapsed_time_ms || 0)) {
@@ -2154,9 +2104,6 @@ window.addEventListener('beforeunload', () => {
     // 页面同步逻辑
     if (typeof window !== 'undefined') {
         window.addEventListener('focus', () => {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:focus',message:'页面获得焦点，触发云端同步',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
             if (window.multiStopwatchManager) {
                 window.multiStopwatchManager.loadCloudDataInBackground().then(() => {
                     console.log('🔄 页面focus，已后台同步状态');
@@ -2166,9 +2113,6 @@ window.addEventListener('beforeunload', () => {
         window.addEventListener('storage', (e) => {
             // 只处理/记录 multiStopwatchData，避免把 auth token 等敏感信息写入日志
             if (e.key !== 'multiStopwatchData') return;
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/61643750-c376-4d1e-a8ca-4573da33032b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'multi-stopwatch-fixed.js:storage',message:'storage事件触发(multiStopwatchData)',data:{key:e.key,newValueSize:e.newValue?e.newValue.length:0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
             if (window.multiStopwatchManager) {
                 window.multiStopwatchManager.loadLocalDataOnly();
                 window.multiStopwatchManager.updateMainPageUI();
