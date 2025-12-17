@@ -7,23 +7,21 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // 创建 Supabase 客户端
 let supabaseInstance = null;
 
-// 初始化 Supabase 客户端
+// 初始化 Supabase 客户端（单例模式，防止重复创建）
 function initSupabaseClient() {
+    // 已经初始化过，直接返回
+    if (supabaseInstance !== null) {
+        return true;
+    }
+    
     try {
-        // 检查 Supabase 是否已加载
+        // 检查 Supabase SDK 是否已加载
         if (typeof window.supabase !== 'undefined') {
             supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             console.log('✅ Supabase 客户端初始化成功');
             return true;
         } else {
-            console.warn('⚠️ Supabase SDK 未加载，等待加载...');
-            // 等待 Supabase SDK 加载完成
-            setTimeout(() => {
-                if (typeof window.supabase !== 'undefined') {
-                    supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                    console.log('✅ Supabase 客户端延迟初始化成功');
-                }
-            }, 1000);
+            console.warn('⚠️ Supabase SDK 未加载');
             return false;
         }
     } catch (error) {
@@ -60,15 +58,9 @@ window.supabaseClient = {
     }
 };
 
-// 页面加载完成后自动初始化
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 页面加载完成，开始初始化 Supabase...');
-    initSupabaseClient();
-});
-
-// 如果 DOMContentLoaded 已经触发，立即初始化
+// 页面加载完成后自动初始化（只注册一次）
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSupabaseClient);
+    document.addEventListener('DOMContentLoaded', initSupabaseClient, { once: true });
 } else {
     initSupabaseClient();
 }
