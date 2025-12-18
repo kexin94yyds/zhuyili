@@ -41,26 +41,34 @@ class MultiStopwatchManager {
     
     // 初始化页面可见性变化监听
     initVisibilityChangeHandler() {
+        // 检测是否为移动设备
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                // 页面不可见（后台、息屏等）→ 暂停所有运行中的计时器
-                let pausedCount = 0;
-                this.timers.forEach((timer, name) => {
-                    if (timer.isRunning) {
-                        this.stop(name);
-                        pausedCount++;
-                        console.log(`⏸️ 页面隐藏，自动暂停计时器: "${name}"`);
+                // 只在移动设备上自动暂停计时器，电脑端不暂停
+                if (isMobile) {
+                    let pausedCount = 0;
+                    this.timers.forEach((timer, name) => {
+                        if (timer.isRunning) {
+                            this.stop(name);
+                            pausedCount++;
+                            console.log(`⏸️ 页面隐藏，自动暂停计时器: "${name}"`);
+                        }
+                    });
+                    if (pausedCount > 0) {
+                        console.log(`📱 页面不可见，已自动暂停 ${pausedCount} 个计时器`);
                     }
-                });
-                if (pausedCount > 0) {
-                    console.log(`📱 页面不可见，已自动暂停 ${pausedCount} 个计时器`);
+                } else {
+                    console.log('💻 电脑端页面隐藏，计时器继续运行');
                 }
             } else {
-                // 页面恢复可见 → 不自动恢复，保持暂停状态
-                console.log('📱 页面恢复可见，计时器保持暂停状态');
+                // 页面恢复可见 → 刷新云端数据
+                console.log('📱 页面恢复可见');
+                this.loadCloudDataInBackground();
             }
         });
-        console.log('✅ 页面可见性监听已启用');
+        console.log(`✅ 页面可见性监听已启用 (${isMobile ? '移动端' : '电脑端'})`);
     }
 
     // ========== 视图管理函数 ==========
@@ -438,6 +446,8 @@ class MultiStopwatchManager {
                 if (retryCount > 0) {
                     this.loadCloudDataInBackground();
                 }
+                // 启动 Realtime 订阅，实现跨设备实时同步
+                this.initRealtimeSubscription();
             } else if (retryCount < maxRetries) {
                 console.warn(`⚠️ Supabase 未就绪，${500}ms 后重试...`);
                 setTimeout(() => this.initSupabase(retryCount + 1), 500);
@@ -450,6 +460,124 @@ class MultiStopwatchManager {
                 setTimeout(() => this.initSupabase(retryCount + 1), 500);
             }
         }
+    }
+    
+    // ========== Realtime 实时同步 ==========
+    
+    // 初始化 Realtime 订阅
+    async initRealtimeSubscription() {
+        if (!this.supabase) {
+            console.warn('⚠️ Supabase 未初始化，无法启动 Realtime');
+            return;
+        }
+        
+        try {
+            // 获取当前用户
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (!user) {
+                console.warn('⚠️ 用户未登录，Realtime 订阅延迟到登录后');
+                return;
+            }
+            
+            console.log('📡 开始订阅 Realtime...');
+            
+            // 订阅 multi_timers 表的变化（只监听当前用户的数据）
+            this.realtimeChannel = this.supabase
+                .channel('multi_timers_realtime')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*', // 监听所有事件：INSERT, UPDATE, DELETE
+                        schema: 'public',
+                        table: 'multi_timers',
+                        filter: `user_id=eq.${user.id}`
+                    },
+                    (payload) => this.handleRealtimeEvent(payload)
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('✅ Realtime 订阅成功，跨设备同步已启用');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('❌ Realtime 订阅失败');
+                    } else {
+                        console.log(`📡 Realtime 状态: ${status}`);
+                    }
+                });
+                
+        } catch (error) {
+            console.error('❌ Realtime 初始化失败:', error);
+        }
+    }
+    
+    // 处理 Realtime 事件
+    handleRealtimeEvent(payload) {
+        console.log('📡 收到 Realtime 事件:', payload.eventType, payload.new?.timer_name || payload.old?.timer_name);
+        
+        const eventType = payload.eventType;
+        const newData = payload.new;
+        const oldData = payload.old;
+        
+        // 防抖：如果是本机刚刚触发的更新（500ms内），忽略
+        const now = Date.now();
+        if (this._lastSaveTime && now - this._lastSaveTime < 500) {
+            console.log('⏭️ 忽略本机触发的 Realtime 事件');
+            return;
+        }
+        
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            const name = newData.timer_name;
+            const existingTimer = this.timers.get(name);
+            
+            // 如果本地计时器正在运行且时间更长，不覆盖
+            if (existingTimer?.isRunning) {
+                const localElapsed = Date.now() - existingTimer.startTime;
+                if (localElapsed > (newData.elapsed_time_ms || 0)) {
+                    console.log(`⏭️ 本地"${name}"正在运行且时间更长，跳过覆盖`);
+                    return;
+                }
+            }
+            
+            // 更新本地状态
+            const cloudTimer = {
+                id: newData.id,
+                name: name,
+                startTime: newData.start_time ? new Date(newData.start_time).getTime() : null,
+                elapsedTime: newData.elapsed_time_ms || 0,
+                isRunning: newData.is_running || false,
+                laps: newData.laps || [],
+                created: newData.created_at ? new Date(newData.created_at).getTime() : Date.now(),
+                lastUpdate: new Date(newData.updated_at).getTime()
+            };
+            
+            this.timers.set(name, cloudTimer);
+            
+            // 更新本地存储
+            this.saveLocalOnly();
+            
+            // 刷新 UI
+            this.updateMainPageUI();
+            this.startRealTimeUpdate();
+            
+            console.log(`✅ Realtime 同步: "${name}" ${eventType === 'INSERT' ? '新增' : '更新'}`);
+            
+        } else if (eventType === 'DELETE') {
+            const name = oldData.timer_name;
+            if (this.timers.has(name)) {
+                this.timers.delete(name);
+                this.saveLocalOnly();
+                this.updateMainPageUI();
+                console.log(`✅ Realtime 同步: "${name}" 已删除`);
+            }
+        }
+    }
+    
+    // 仅保存到本地（不触发云端同步，避免循环）
+    saveLocalOnly() {
+        const data = {};
+        this.timers.forEach((timer, name) => {
+            data[name] = { ...timer };
+        });
+        localStorage.setItem('multiStopwatchData', JSON.stringify(data));
     }
     
     // 标准化活动名称（大小写不敏感）
@@ -1325,6 +1453,9 @@ class MultiStopwatchManager {
         console.log('\n💾 ========== 开始保存数据 ==========');
         console.log(`📱 设备: ${navigator.userAgent.includes('Mobile') ? '手机' : '电脑'}`);
         console.log(`⏰ 时间: ${new Date().toLocaleString('zh-CN')}`);
+        
+        // 记录保存时间，用于 Realtime 防抖（避免自己触发的事件被重复处理）
+        this._lastSaveTime = Date.now();
         
         const data = {};
         const now = Date.now();
